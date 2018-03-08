@@ -150,7 +150,7 @@
                 ^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)(\.|-)((([a-zA-Z]+)?([0-9]+))|(SNAPSHOT)).*
               </regex>
               <replacement>$6</replacement>
-              <failIfNoMatch>true</failIfNoMatch>
+              <failIfNoMatch>false</failIfNoMatch>
             </configuration>
           </execution>
         </executions>
