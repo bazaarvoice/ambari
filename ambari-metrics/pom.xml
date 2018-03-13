@@ -23,7 +23,7 @@
   <packaging>pom</packaging>
   <scm>
     <url>https://github.com/bazaarvoice/ambari</url>
-    <connection>scm:git:ssh://git@github.com:bazaarvoice/ambari.git</connection>
+    <connection>scm:git:git://git@github.com/bazaarvoice/ambari.git</connection>
   </scm>
   <modules>
     <module>../utility</module>
