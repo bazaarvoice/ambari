@@ -120,7 +120,7 @@
             <configuration>
               <name>ambariVersion</name>
               <value>${project.version}</value>
-              <regex>^([0-9]+)\.([0-9]+)\.([0-9]+)\.(bv)?([0-9]+)(\.|-).*</regex>
+              <regex>^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)(\.|-).*</regex>
               <replacement>$1.$2.$3.$4</replacement>
               <failIfNoMatch>true</failIfNoMatch>
             </configuration>
@@ -133,7 +133,7 @@
             <configuration>
               <name>package-version</name>
               <value>${project.version}</value>
-              <regex>^([0-9]+)\.([0-9]+)\.([0-9]+)\.(bv)?([0-9]+)(\.|-).*</regex>
+              <regex>^([0-9]+)\.([0-9]+)\.([0-9]+)\.((bv)?[0-9]+)(\.|-).*</regex>
               <replacement>$1.$2.$3.$4</replacement>
               <failIfNoMatch>true</failIfNoMatch>
             </configuration>
