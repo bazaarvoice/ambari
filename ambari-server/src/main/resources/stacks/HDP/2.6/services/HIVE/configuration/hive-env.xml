@@ -104,6 +104,9 @@ if [ "${HIVE_AUX_JARS_PATH}" != "" ]; then
 elif [ -d "/usr/hdp/current/hive-webhcat/share/hcatalog" ]; then
   export HIVE_AUX_JARS_PATH=/usr/hdp/current/hive-webhcat/share/hcatalog/hive-hcatalog-core.jar
 fi
+if [ "{{hive_aux_jars}}" != "" ]; then
+  export HIVE_AUX_JARS_PATH=$HIVE_AUX_JARS_PATH,{{hive_aux_jars}}
+fi
 
 export METASTORE_PORT={{hive_metastore_port}}
 
