@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,13 +22,15 @@ package org.apache.ambari.server.controller;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.ambari.server.controller.internal.AlertTargetResourceProvider;
+import org.apache.ambari.server.controller.internal.ClusterStackVersionResourceProvider;
 import org.apache.ambari.server.controller.internal.UpgradeResourceProvider;
+import org.apache.ambari.server.controller.internal.ViewInstanceResourceProvider;
 import org.apache.ambari.server.controller.spi.Resource;
 import org.apache.ambari.server.controller.spi.Resource.Type;
 import org.apache.ambari.server.controller.spi.ResourceProvider;
 
 import com.google.inject.name.Named;
-import java.util.Set;
 
 public interface ResourceProviderFactory {
   @Named("host")
@@ -42,14 +44,10 @@ public interface ResourceProviderFactory {
       AmbariManagementController managementController);
 
   @Named("service")
-  ResourceProvider getServiceResourceProvider(Set<String> propertyIds,
-      Map<Type, String> keyPropertyIds,
-      AmbariManagementController managementController);
+  ResourceProvider getServiceResourceProvider(AmbariManagementController managementController);
 
   @Named("component")
-  ResourceProvider getComponentResourceProvider(Set<String> propertyIds,
-      Map<Type, String> keyPropertyIds,
-      AmbariManagementController managementController);
+  ResourceProvider getComponentResourceProvider(AmbariManagementController managementController);
 
   @Named("member")
   ResourceProvider getMemberResourceProvider(Set<String> propertyIds,
@@ -72,5 +70,14 @@ public interface ResourceProviderFactory {
 
   @Named("upgrade")
   UpgradeResourceProvider getUpgradeResourceProvider(AmbariManagementController managementController);
+
+  @Named("clusterStackVersion")
+  ClusterStackVersionResourceProvider getClusterStackVersionResourceProvider(AmbariManagementController managementController);
+
+  @Named("alertTarget")
+  AlertTargetResourceProvider getAlertTargetResourceProvider();
+
+  @Named("viewInstance")
+  ViewInstanceResourceProvider getViewInstanceResourceProvider();
 
 }

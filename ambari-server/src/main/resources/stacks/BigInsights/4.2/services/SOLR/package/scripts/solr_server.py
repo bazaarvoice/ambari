@@ -20,7 +20,6 @@ limitations under the License.
 
 import sys
 from resource_management import *
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from solr_service import solr_service
 from solr import solr
@@ -39,8 +38,7 @@ class SolrServer(Script):
     import params
     env.set_params(params)
     if params.version and compare_versions(format_stack_version(params.version), '4.1.0.0') >= 0:
-      stack_select.select("solr-server", params.version)
-      conf_select.select(params.stack_name, "solr", params.version)
+      stack_select.select_packages(params.version)
 
   def start(self, env, upgrade_type=None):
     import params

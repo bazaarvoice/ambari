@@ -247,7 +247,7 @@
   <properties>
     <ambari.dir>../../..</ambari.dir>
     <hive-version>2.1.0</hive-version>
-    <ambari.version>2.5.2.0.0</ambari.version>
+    <ambari.version>2.6.1.0.0</ambari.version>
   </properties>
   <build>
     <plugins>

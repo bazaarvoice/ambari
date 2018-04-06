@@ -21,7 +21,6 @@ package org.apache.ambari.server.stack;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import org.apache.ambari.server.AmbariException;
-import org.apache.ambari.server.api.services.AmbariMetaInfo;
 import org.apache.ambari.server.state.CommandScriptDefinition;
 import org.apache.ambari.server.state.ComponentInfo;
 import org.apache.ambari.server.state.CredentialStoreInfo;
@@ -465,6 +464,36 @@ public class ServiceModuleTest {
     parent.getModuleInfo().setChecksFolder(new File("other"));
     resolveService(child, parent);
     assertEquals(checks.getPath(), child.getModuleInfo().getChecksFolder().getPath());
+  }
+
+  @Test
+  public void testResolve_ServerActionDirectory() throws Exception {
+    File serverActions = new File("server_actions");
+
+    // check directory specified in child only
+    ServiceInfo info = new ServiceInfo();
+    ServiceInfo parentInfo = new ServiceInfo();
+    ServiceModule child = createServiceModule(info);
+    ServiceModule parent = createServiceModule(parentInfo);
+    child.getModuleInfo().setServerActionsFolder(serverActions);
+    resolveService(child, parent);
+    assertEquals(serverActions.getPath(), child.getModuleInfo().getServerActionsFolder().getPath());
+
+    // check directory specified in parent only
+    child = createServiceModule(info);
+    parent = createServiceModule(parentInfo);
+    parent.getModuleInfo().setServerActionsFolder(serverActions);
+    resolveService(child, parent);
+    assertEquals(serverActions.getPath(), child.getModuleInfo().getServerActionsFolder().getPath());
+
+    // check directory set in both
+    info.setServerActionsFolder(serverActions);
+    child = createServiceModule(info);
+    child.getModuleInfo().setServerActionsFolder(serverActions);
+    parent = createServiceModule(parentInfo);
+    parent.getModuleInfo().setServerActionsFolder(new File("other"));
+    resolveService(child, parent);
+    assertEquals(serverActions.getPath(), child.getModuleInfo().getServerActionsFolder().getPath());
   }
 
   @Test
@@ -1236,7 +1265,7 @@ public class ServiceModuleTest {
 
     ServiceDirectory serviceDirectory = createNiceMock(ServiceDirectory.class);
 
-    expect(serviceDirectory.getConfigurationDirectory(dir, AmbariMetaInfo.SERVICE_PROPERTIES_FOLDER_NAME)).andReturn(configDir).anyTimes();
+    expect(serviceDirectory.getConfigurationDirectory(dir, StackDirectory.SERVICE_PROPERTIES_FOLDER_NAME)).andReturn(configDir).anyTimes();
     expect(serviceDirectory.getMetricsFile(anyObject(String.class))).andReturn(new File("testMetricsFile")).anyTimes();
     expect(serviceDirectory.getWidgetsDescriptorFile(anyObject(String.class))).andReturn(new File("testWidgetsFile")).anyTimes();
     expect(serviceDirectory.getAlertsFile()).andReturn(new File("testAlertsFile")).anyTimes();

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,10 +22,13 @@ import java.util.Map;
 
 import org.apache.ambari.server.AmbariException;
 import org.apache.ambari.server.controller.ServiceResponse;
+import org.apache.ambari.server.orm.entities.RepositoryVersionEntity;
 
 public interface Service {
 
   String getName();
+
+  String getDisplayName();
 
   long getClusterId();
 
@@ -64,9 +67,7 @@ public interface Service {
    */
   void setSecurityState(SecurityState securityState) throws AmbariException;
 
-  StackId getDesiredStackVersion();
-
-  void setDesiredStackVersion(StackId stackVersion);
+  StackId getDesiredStackId();
 
   ServiceResponse convertToResponse();
 
@@ -138,6 +139,22 @@ public interface Service {
    * @param credentialStoreEnabled - true or false
    */
   void setCredentialStoreEnabled(boolean credentialStoreEnabled);
+
+  /**
+   * @return
+   */
+  RepositoryVersionEntity getDesiredRepositoryVersion();
+
+  /**
+   * @param desiredRepositoryVersion
+   */
+  void setDesiredRepositoryVersion(RepositoryVersionEntity desiredRepositoryVersion);
+
+  /**
+   * Gets the repository for the desired version of this service by consulting
+   * the repository states of all known components.
+   */
+  RepositoryVersionState getRepositoryState();
 
   enum Type {
     HDFS,

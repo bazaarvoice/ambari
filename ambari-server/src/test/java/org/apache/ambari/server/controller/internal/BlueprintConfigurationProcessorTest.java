@@ -78,6 +78,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 /**
  * BlueprintConfigurationProcessor unit tests.
@@ -3359,6 +3360,14 @@ public class BlueprintConfigurationProcessorTest extends EasyMockSupport {
     yarnSiteProperties.put("yarn.resourcemanager.ha.rm-ids", "rm1, rm2");
     yarnSiteProperties.put("yarn.resourcemanager.hostname.rm1", expectedHostName);
     yarnSiteProperties.put("yarn.resourcemanager.hostname.rm2", expectedHostNameTwo);
+    yarnSiteProperties.put("yarn.resourcemanager.address.rm1", expectedHostName + ":" + expectedPortNum);
+    yarnSiteProperties.put("yarn.resourcemanager.address.rm2", expectedHostNameTwo + ":" + expectedPortNum);
+    yarnSiteProperties.put("yarn.resourcemanager.admin.address.rm1", expectedHostName + ":" + expectedPortNum);
+    yarnSiteProperties.put("yarn.resourcemanager.admin.address.rm2", expectedHostNameTwo + ":" + expectedPortNum);
+    yarnSiteProperties.put("yarn.resourcemanager.resource-tracker.address.rm1", expectedHostName + ":" + expectedPortNum);
+    yarnSiteProperties.put("yarn.resourcemanager.resource-tracker.address.rm2", expectedHostNameTwo + ":" + expectedPortNum);
+    yarnSiteProperties.put("yarn.resourcemanager.scheduler.address.rm1", expectedHostName + ":" + expectedPortNum);
+    yarnSiteProperties.put("yarn.resourcemanager.scheduler.address.rm2", expectedHostNameTwo + ":" + expectedPortNum);
     yarnSiteProperties.put("yarn.resourcemanager.webapp.address.rm1", expectedHostName + ":" + expectedPortNum);
     yarnSiteProperties.put("yarn.resourcemanager.webapp.address.rm2", expectedHostNameTwo + ":" + expectedPortNum);
     yarnSiteProperties.put("yarn.resourcemanager.webapp.https.address.rm1", expectedHostName + ":" + expectedPortNum);
@@ -3411,18 +3420,20 @@ public class BlueprintConfigurationProcessorTest extends EasyMockSupport {
       createExportedHostName(expectedHostGroupName, expectedPortNum), yarnSiteProperties.get("yarn.timeline-service.webapp.https.address"));
 
     // verify that dynamically-named RM HA properties are exported as expected
-    assertEquals("Yarn ResourceManager rm1 hostname not exported properly",
-      createExportedHostName(expectedHostGroupName), yarnSiteProperties.get("yarn.resourcemanager.hostname.rm1"));
-    assertEquals("Yarn ResourceManager rm2 hostname not exported properly",
-      createExportedHostName(expectedHostGroupNameTwo), yarnSiteProperties.get("yarn.resourcemanager.hostname.rm2"));
-    assertEquals("Yarn ResourceManager rm1 web address not exported properly",
-      createExportedHostName(expectedHostGroupName, expectedPortNum), yarnSiteProperties.get("yarn.resourcemanager.webapp.address.rm1"));
-    assertEquals("Yarn ResourceManager rm2 web address not exported properly",
-      createExportedHostName(expectedHostGroupNameTwo, expectedPortNum), yarnSiteProperties.get("yarn.resourcemanager.webapp.address.rm2"));
-    assertEquals("Yarn ResourceManager rm1 HTTPS address not exported properly",
-      createExportedHostName(expectedHostGroupName, expectedPortNum), yarnSiteProperties.get("yarn.resourcemanager.webapp.https.address.rm1"));
-    assertEquals("Yarn ResourceManager rm2 HTTPS address not exported properly",
-      createExportedHostName(expectedHostGroupNameTwo, expectedPortNum), yarnSiteProperties.get("yarn.resourcemanager.webapp.https.address.rm2"));
+    List<String> properties = Arrays.asList(
+      "yarn.resourcemanager.address",
+      "yarn.resourcemanager.admin.address",
+      "yarn.resourcemanager.resource-tracker.address",
+      "yarn.resourcemanager.scheduler.address",
+      "yarn.resourcemanager.webapp.address",
+      "yarn.resourcemanager.webapp.https.address"
+    );
+    for (String property : properties) {
+      String propertyWithID = property + ".rm1";
+      assertEquals(propertyWithID, createExportedHostName(expectedHostGroupName, expectedPortNum), yarnSiteProperties.get(propertyWithID));
+      propertyWithID = property + ".rm2";
+      assertEquals(propertyWithID, createExportedHostName(expectedHostGroupNameTwo, expectedPortNum), yarnSiteProperties.get(propertyWithID));
+    }
 
     assertEquals("Yarn Zookeeper address property not exported properly",
       createExportedHostName(expectedHostGroupName, "2181") + "," + createExportedHostName(expectedHostGroupNameTwo, "2181"),
@@ -4940,6 +4951,7 @@ public class BlueprintConfigurationProcessorTest extends EasyMockSupport {
   @Test
   public void testAtlas() throws Exception {
     final String expectedHostGroupName = "host_group_1";
+    final String zkHostGroupName = "zk_host_group";
     final String host1 = "c6401.ambari.apache.org";
     final String host2 = "c6402.ambari.apache.org";
     final String host3 = "c6403.ambari.apache.org";
@@ -4958,18 +4970,24 @@ public class BlueprintConfigurationProcessorTest extends EasyMockSupport {
 
     Configuration clusterConfig = new Configuration(properties, Collections.<String, Map<String, Map<String, String>>>emptyMap());
 
-    Collection<String> hgComponents = new HashSet<>();
-    hgComponents.add("KAFKA_BROKER");
-    hgComponents.add("ZOOKEEPER_SERVER");
-    hgComponents.add("HBASE_MASTER");
+    Collection<String> hg1Components = new HashSet<>();
+    hg1Components.add("KAFKA_BROKER");
+    hg1Components.add("HBASE_MASTER");
     List<String> hosts = new ArrayList<>();
     hosts.add(host1);
     hosts.add(host2);
-    hosts.add(host3);
-    TestHostGroup group1 = new TestHostGroup(expectedHostGroupName, hgComponents, hosts);
+    TestHostGroup group1 = new TestHostGroup(expectedHostGroupName, hg1Components, hosts);
+
+    // Place ZOOKEEPER_SERVER in separate host group/host other
+    // than ATLAS
+    Collection<String> zkHostGroupComponents = new HashSet<>();
+    zkHostGroupComponents.add("ZOOKEEPER_SERVER");
+
+    TestHostGroup group2 = new TestHostGroup(zkHostGroupName, zkHostGroupComponents, Collections.singletonList(host3));
 
     Collection<TestHostGroup> hostGroups = new HashSet<>();
     hostGroups.add(group1);
+    hostGroups.add(group2);
 
     ClusterTopology topology = createClusterTopology(bp, clusterConfig, hostGroups);
     BlueprintConfigurationProcessor updater = new BlueprintConfigurationProcessor(topology);
@@ -4980,29 +4998,29 @@ public class BlueprintConfigurationProcessorTest extends EasyMockSupport {
     List<String> hostArray =
       Arrays.asList(atlasProperties.get("atlas.kafka.bootstrap.servers").split(","));
     List<String> expected =
-      Arrays.asList("c6401.ambari.apache.org:6667", "c6402.ambari.apache.org:6667", "c6403.ambari.apache.org:6667");
+      Arrays.asList("c6401.ambari.apache.org:6667", "c6402.ambari.apache.org:6667");
 
     Assert.assertTrue(hostArray.containsAll(expected) && expected.containsAll(hostArray));
 
     hostArray = Arrays.asList(atlasProperties.get("atlas.kafka.zookeeper.connect").split(","));
     expected =
-      Arrays.asList("c6401.ambari.apache.org:2181", "c6402.ambari.apache.org:2181", "c6403.ambari.apache.org:2181");
+      Arrays.asList("c6403.ambari.apache.org:2181");
     Assert.assertTrue(hostArray.containsAll(expected) && expected.containsAll(hostArray));
 
 
     hostArray = Arrays.asList(atlasProperties.get("atlas.graph.index.search.solr.zookeeper-url").split(","));
     expected =
-      Arrays.asList("c6401.ambari.apache.org:2181/ambari-solr", "c6402.ambari.apache.org:2181/ambari-solr", "c6403.ambari.apache.org:2181/ambari-solr");
+      Arrays.asList("c6403.ambari.apache.org:2181/ambari-solr");
     Assert.assertTrue(hostArray.containsAll(expected) && expected.containsAll(hostArray));
 
     hostArray = Arrays.asList(atlasProperties.get("atlas.graph.storage.hostname").split(","));
     expected =
-      Arrays.asList("c6401.ambari.apache.org", "c6402.ambari.apache.org", "c6403.ambari.apache.org");
+      Arrays.asList("c6403.ambari.apache.org");
     Assert.assertTrue(hostArray.containsAll(expected) && expected.containsAll(hostArray));
 
     hostArray = Arrays.asList(atlasProperties.get("atlas.audit.hbase.zookeeper.quorum").split(","));
     expected =
-      Arrays.asList("c6401.ambari.apache.org", "c6402.ambari.apache.org", "c6403.ambari.apache.org");
+      Arrays.asList("c6403.ambari.apache.org");
     Assert.assertTrue(hostArray.containsAll(expected) && expected.containsAll(hostArray));
   }
 
@@ -7866,6 +7884,37 @@ public class BlueprintConfigurationProcessorTest extends EasyMockSupport {
     assertEquals(someString, metricsReporterRegister);
   }
 
+  @Test
+  public void druidProperties() throws Exception {
+    Map<String, Map<String, String>> properties = new HashMap<>();
+    Map<String, String> druidCommon = new HashMap<>();
+    String connectUriKey = "druid.metadata.storage.connector.connectURI";
+    String metastoreHostnameKey = "metastore_hostname";
+    String connectUriTemplate = "jdbc:mysql://%s:3306/druid?createDatabaseIfNotExist=true";
+    druidCommon.put(connectUriKey, String.format(connectUriTemplate, "%HOSTGROUP::group1%"));
+    druidCommon.put(metastoreHostnameKey, "%HOSTGROUP::group1%");
+    properties.put("druid-common", druidCommon);
+
+    Map<String, Map<String, String>> parentProperties = new HashMap<>();
+    Configuration parentClusterConfig = new Configuration(parentProperties, Collections.<String, Map<String, Map<String, String>>>emptyMap());
+    Configuration clusterConfig = new Configuration(properties, Collections.<String, Map<String, Map<String, String>>>emptyMap(), parentClusterConfig);
+
+    Collection<String> hgComponents1 = Sets.newHashSet("DRUID_COORDINATOR");
+    TestHostGroup group1 = new TestHostGroup("group1", hgComponents1, Collections.singleton("host1"));
+
+    Collection<String> hgComponents2 = Sets.newHashSet("DRUID_BROKER", "DRUID_OVERLORD", "DRUID_ROUTER");
+    TestHostGroup group2 = new TestHostGroup("group2", hgComponents2, Collections.singleton("host2"));
+
+    Collection<TestHostGroup> hostGroups = Arrays.asList(group1, group2);
+
+    ClusterTopology topology = createClusterTopology(bp, clusterConfig, hostGroups);
+    BlueprintConfigurationProcessor configProcessor = new BlueprintConfigurationProcessor(topology);
+
+    configProcessor.doUpdateForClusterCreate();
+
+    assertEquals(String.format(connectUriTemplate, "host1"), clusterConfig.getPropertyValue("druid-common", connectUriKey));
+    assertEquals("host1", clusterConfig.getPropertyValue("druid-common", metastoreHostnameKey));
+  }
 
   @Test
   public void testAmsPropertiesDefault() throws Exception {

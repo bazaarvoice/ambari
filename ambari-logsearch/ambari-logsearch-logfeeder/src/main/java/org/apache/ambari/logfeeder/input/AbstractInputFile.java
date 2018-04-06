@@ -54,6 +54,7 @@ public abstract class AbstractInputFile extends Input {
   private int checkPointIntervalMS;
   private Map<String, Object> jsonCheckPoint;
   private InputMarker lastCheckPointInputMarker;
+  private Integer maxAgeMin;
 
   @Override
   protected String getStatMetricName() {
@@ -75,6 +76,7 @@ public abstract class AbstractInputFile extends Input {
     setClosed(true);
     logPath = getStringValue("path");
     tail = getBooleanValue("tail", tail);
+    maxAgeMin = getIntValue("max_age_min", 0);
     checkPointIntervalMS = getIntValue("checkpoint.interval.ms", DEFAULT_CHECKPOINT_INTERVAL_MS);
 
     if (StringUtils.isEmpty(logPath)) {
@@ -89,6 +91,16 @@ public abstract class AbstractInputFile extends Input {
     }
 
     setFilePath(logPath);
+    // Check there can have pattern in folder
+    if (getFilePath() != null && getFilePath().contains("/")) {
+      int lastIndexOfSlash = getFilePath().lastIndexOf("/");
+      String folderBeforeLogName = getFilePath().substring(0, lastIndexOfSlash);
+      if (folderBeforeLogName.contains("*")) {
+        LOG.info("Found regex in folder path ('" + getFilePath() + "'), will check against multiple folders.");
+        setMultiFolder(true);
+      }
+    }
+
     boolean isFileReady = isReady();
 
     LOG.info("File to monitor " + logPath + ", tail=" + tail + ", isReady=" + isFileReady);
@@ -276,6 +288,9 @@ public abstract class AbstractInputFile extends Input {
         jsonCheckPoint.put("line_number", "" + new Integer(inputMarker.lineNumber));
         jsonCheckPoint.put("last_write_time_ms", "" + new Long(currMS));
         jsonCheckPoint.put("last_write_time_date", new Date());
+        if (maxAgeMin != 0) {
+          jsonCheckPoint.put("max_age_min", maxAgeMin.toString());
+        }
 
         String jsonStr = LogFeederUtil.getGson().toJson(jsonCheckPoint);
 
@@ -315,5 +330,9 @@ public abstract class AbstractInputFile extends Input {
   public String getShortDescription() {
     return "input:source=" + getStringValue("source") + ", path=" +
         (!ArrayUtils.isEmpty(logFiles) ? logFiles[0].getAbsolutePath() : logPath);
+  }
+
+  public Integer getMaxAgeMin() {
+    return maxAgeMin;
   }
 }

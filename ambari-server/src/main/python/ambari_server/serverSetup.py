@@ -23,7 +23,7 @@ import os
 import re
 import shutil
 import sys
-import subprocess
+from ambari_commons import subprocess32
 import getpass
 import logging
 
@@ -38,10 +38,10 @@ from ambari_commons.str_utils import compress_backslashes
 from ambari_server.dbConfiguration import DBMSConfigFactory, TAR_GZ_ARCHIVE_TYPE, default_connectors_map, check_jdbc_drivers
 from ambari_server.serverConfiguration import configDefaults, JDKRelease, \
   get_ambari_properties, get_is_secure, get_is_persisted, get_java_exe_path, get_JAVA_HOME, get_missing_properties, \
-  get_resources_location, get_value_from_properties, read_ambari_user, update_properties, validate_jdk, write_property, \
+  get_resources_location, get_value_from_properties, read_ambari_user, update_properties, validate_jdk, write_gpl_license_accepted, write_property, \
   JAVA_HOME, JAVA_HOME_PROPERTY, JCE_NAME_PROPERTY, JDBC_RCA_URL_PROPERTY, JDBC_URL_PROPERTY, \
   JDK_NAME_PROPERTY, JDK_RELEASES, NR_USER_PROPERTY, OS_FAMILY, OS_FAMILY_PROPERTY, OS_TYPE, OS_TYPE_PROPERTY, OS_VERSION, \
-  VIEWS_DIR_PROPERTY, JDBC_DATABASE_PROPERTY, JDK_DOWNLOAD_SUPPORTED_PROPERTY, JCE_DOWNLOAD_SUPPORTED_PROPERTY, SETUP_DONE_PROPERTIES
+  VIEWS_DIR_PROPERTY, JDBC_DATABASE_PROPERTY, JDK_DOWNLOAD_SUPPORTED_PROPERTY, JCE_DOWNLOAD_SUPPORTED_PROPERTY, SETUP_DONE_PROPERTIES, GPL_LICENSE_ACCEPTED_PROPERTY
 from ambari_server.serverUtils import is_server_runing
 from ambari_server.setupSecurity import adjust_directory_permissions
 from ambari_server.userInput import get_YN_input, get_validated_string_input
@@ -78,8 +78,6 @@ UNTAR_JDK_ARCHIVE = "tar --no-same-owner -xvf {0}"
 
 JDK_PROMPT = "[{0}] {1}\n"
 JDK_VALID_CHOICES = "^[{0}{1:d}]$"
-
-
 
 def get_supported_jdbc_drivers():
   factory = DBMSConfigFactory()
@@ -802,10 +800,10 @@ class JDKSetupLinux(JDKSetup):
 
     cmd = " && ".join(cmds)
 
-    process = subprocess.Popen(cmd,
-                           stdout=subprocess.PIPE,
-                           stdin=subprocess.PIPE,
-                           stderr=subprocess.PIPE,
+    process = subprocess32.Popen(cmd,
+                           stdout=subprocess32.PIPE,
+                           stdin=subprocess32.PIPE,
+                           stderr=subprocess32.PIPE,
                            shell=True
                            )
     (stdoutdata, stderrdata) = process.communicate()
@@ -1129,6 +1127,9 @@ def setup(options):
   except FatalException as e:
     err = 'Downloading or installing JDK failed: {0}. Exiting.'.format(e)
     raise FatalException(e.code, err)
+
+  print 'Checking GPL software agreement...'
+  write_gpl_license_accepted(default_prompt_value=options.accept_gpl)
 
   print 'Completing setup...'
   retcode = configure_os_settings()

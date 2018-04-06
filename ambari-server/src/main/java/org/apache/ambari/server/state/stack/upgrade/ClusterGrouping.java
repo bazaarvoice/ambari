@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,9 +25,9 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 
+import javax.xml.bind.Unmarshaller;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
@@ -47,9 +47,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Objects;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 
 /**
  * Used to represent cluster-based operations.
@@ -74,6 +71,10 @@ public class ClusterGrouping extends Grouping {
     return new ClusterBuilder(this);
   }
 
+  @Override
+  protected boolean serviceCheckAfterProcessing() {
+    return false;
+  }
 
   /**
    * Represents a single-stage execution that happens as part of a cluster-wide
@@ -126,6 +127,20 @@ public class ClusterGrouping extends Grouping {
       return Objects.toStringHelper(this).add("id", id).add("title",
           title).omitNullValues().toString();
     }
+
+    /**
+     * If a task is found that is configure, set its associated service.  This is used
+     * if the configuration type cannot be isolated by service.
+     */
+    void afterUnmarshal(Unmarshaller unmarshaller, Object parent) {
+      if (task.getType().equals(Task.Type.CONFIGURE) && StringUtils.isNotEmpty(service)) {
+        ((ConfigureTask) task).associatedService = service;
+      } else if (task.getType().equals(Task.Type.CREATE_AND_CONFIGURE) && StringUtils.isNotEmpty(service)) {
+        ((CreateAndConfigureTask) task).associatedService = service;
+      }
+    }
+
+
   }
 
   public class ClusterBuilder extends StageWrapperBuilder {
@@ -171,6 +186,22 @@ public class ClusterGrouping extends Grouping {
           if (null != execution.condition && !execution.condition.isSatisfied(upgradeContext)) {
             LOG.info("Skipping {} while building upgrade orchestration due to {}", execution,
                 execution.condition);
+
+            continue;
+          }
+
+          // only schedule this stage if its service is part of the upgrade
+          if (StringUtils.isNotBlank(execution.service)) {
+            if (!upgradeContext.isServiceSupported(execution.service)) {
+              continue;
+            }
+          }
+
+          // tasks can have their own condition, so check that too
+          if (null != execution.task.condition
+              && !execution.task.condition.isSatisfied(upgradeContext)) {
+            LOG.info("Skipping {} while building upgrade orchestration due to {}", execution,
+                execution.task.condition);
 
             continue;
           }
@@ -224,7 +255,7 @@ public class ClusterGrouping extends Grouping {
       if (null == hosts || hosts.hosts.isEmpty()) {
         return null;
       } else {
-        realHosts = new LinkedHashSet<String>(hosts.hosts);
+        realHosts = new LinkedHashSet<>(hosts.hosts);
       }
     }
 
@@ -264,12 +295,13 @@ public class ClusterGrouping extends Grouping {
         return null;
       }
 
+      // !!! FUTURE: check for component
 
       HostsType hosts = ctx.getResolver().getMasterAndHosts(service, component);
 
       if (hosts != null) {
 
-        Set<String> realHosts = new LinkedHashSet<String>(hosts.hosts);
+        Set<String> realHosts = new LinkedHashSet<>(hosts.hosts);
         if (ExecuteHostType.MASTER == et.hosts && null != hosts.master) {
           realHosts = Collections.singleton(hosts.master);
         }
@@ -292,7 +324,7 @@ public class ClusterGrouping extends Grouping {
         }
 
         return new StageWrapper(
-            StageWrapper.Type.RU_TASKS,
+            StageWrapper.Type.UPGRADE_TASKS,
             execution.title,
             new TaskWrapper(service, component, realHosts, et));
       }
@@ -300,7 +332,7 @@ public class ClusterGrouping extends Grouping {
       // no service and no component will distributed the task to all healthy
       // hosts not in maintenance mode
       Cluster cluster = ctx.getCluster();
-      Set<String> hostNames = new HashSet<String>();
+      Set<String> hostNames = new HashSet<>();
       for (Host host : ctx.getCluster().getHosts()) {
         MaintenanceState maintenanceState = host.getMaintenanceState(cluster.getClusterId());
         if (maintenanceState == MaintenanceState.OFF) {
@@ -309,37 +341,11 @@ public class ClusterGrouping extends Grouping {
       }
 
       return new StageWrapper(
-          StageWrapper.Type.RU_TASKS,
+          StageWrapper.Type.UPGRADE_TASKS,
           execution.title,
           new TaskWrapper(service, component, hostNames, et));
     }
     return null;
-  }
-
-  /**
-   * Populates the manual task, mt, with information about the list of hosts.
-   * @param mt Manual Task
-   * @param hostToComponents Map from host name to list of components
-   */
-  private void fillHostDetails(ManualTask mt, Map<String, List<String>> hostToComponents) {
-    JsonArray arr = new JsonArray();
-    for (Entry<String, List<String>> entry : hostToComponents.entrySet()) {
-      JsonObject hostObj = new JsonObject();
-      hostObj.addProperty("host", entry.getKey());
-
-      JsonArray componentArr = new JsonArray();
-      for (String comp : entry.getValue()) {
-        componentArr.add(new JsonPrimitive(comp));
-      }
-      hostObj.add("components", componentArr);
-
-      arr.add(hostObj);
-    }
-
-    JsonObject obj = new JsonObject();
-    obj.add("unhealthy", arr);
-
-    mt.structuredOut = obj.toString();
   }
 
   /**
@@ -349,7 +355,7 @@ public class ClusterGrouping extends Grouping {
   @Override
   public void merge(Iterator<Grouping> iterator) throws AmbariException {
     if (executionStages == null) {
-      executionStages = new ArrayList<ExecuteStage>();
+      executionStages = new ArrayList<>();
     }
     Map<String, List<ExecuteStage>> skippedStages = new HashMap<>();
     while (iterator.hasNext()) {

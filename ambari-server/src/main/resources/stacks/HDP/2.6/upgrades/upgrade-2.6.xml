@@ -33,6 +33,8 @@
     <check>org.apache.ambari.server.checks.ServicesYarnWorkPreservingCheck</check>
     <check>org.apache.ambari.server.checks.YarnRMHighAvailabilityCheck</check>
     <check>org.apache.ambari.server.checks.YarnTimelineServerStatePreservingCheck</check>
+    <check>org.apache.ambari.server.checks.DruidHighAvailabilityCheck</check>
+    <check>org.apache.ambari.server.checks.LZOCheck</check>
 
     <configuration>
       <!-- Configuration properties for all pre-reqs including required pre-reqs -->
@@ -67,6 +69,7 @@
       <supports-auto-skip-failure>false</supports-auto-skip-failure>
 
       <execute-stage service="HBASE" component="HBASE_MASTER" title="Pre Upgrade HBase Backup">
+        <condition xsi:type="config" type="cluster-env" property="stack_upgrade_rolling_skip_hbase_snapshot" comparison="not-equals" value="true"/>
         <task xsi:type="execute" hosts="master">
           <script>scripts/hbase_upgrade.py</script>
           <function>take_snapshot</function>
@@ -554,6 +557,14 @@
       </component>
 
       <component name="RANGER_USERSYNC">
+        <pre-upgrade>
+          <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.RangerUsersyncConfigCalculation">
+            <summary>Enabling Nested Group Sync for Ranger</summary>
+          </task>
+        </pre-upgrade>
+
+        <pre-downgrade /> <!--  no-op to prevent config changes on downgrade -->
+
         <upgrade>
           <task xsi:type="restart-task" />
         </upgrade>
@@ -666,6 +677,8 @@
           <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.FixLzoCodecPath">
             <summary>Verifying LZO codec path for mapreduce</summary>
           </task>
+          
+          <task xsi:type="configure" id="hdp_2_6_mapreduce_tarball_ld_library" supports-patch="true"/>
         </pre-upgrade>
 
         <pre-downgrade copy-upgrade="true" />
@@ -678,6 +691,10 @@
 
     <service name="YARN">
       <component name="APP_TIMELINE_SERVER">
+        <pre-upgrade>
+          <task xsi:type="configure" id="hdp_2_6_yarn_spark_versioned_classpaths" supports-patch="true"/>
+        </pre-upgrade>
+        <pre-downgrade/>
         <upgrade>
           <task xsi:type="restart-task" />
         </upgrade>
@@ -687,6 +704,7 @@
         <pre-upgrade>
           <task xsi:type="configure" id="hdp_2_6_maint_ranger_yarn_plugin_cluster_name"/>
           <task xsi:type="configure" id="hdp_2_6_yarn_preemption" />
+          <task xsi:type="configure" id="hdp_2_6_yarn_app_classpath_parameterization" supports-patch="true"/>
         </pre-upgrade>
         <pre-downgrade/> <!--  no-op to prevent config changes on downgrade -->
         <upgrade>
@@ -747,6 +765,8 @@
           <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.FixLzoCodecPath">
             <summary>Verifying LZO codec path for Tez</summary>
           </task>
+          
+          <task xsi:type="configure" id="hdp_2_6_tez_tarball_ld_library" supports-patch="true"/>
         </pre-upgrade>
 
         <pre-downgrade copy-upgrade="true" />
@@ -801,6 +821,10 @@
       </component>
 
       <component name="HIVE_SERVER_INTERACTIVE">
+        <pre-upgrade>
+          <task xsi:type="configure" id="llap_update_tez_shuffle_ssl_enable"/>
+        </pre-upgrade>
+        <pre-downgrade/> <!--  no-op to prevent config changes on downgrade -->
         <upgrade>
           <task xsi:type="restart-task" />
         </upgrade>
@@ -881,6 +905,12 @@
 
     <service name="ZEPPELIN">
       <component name="ZEPPELIN_MASTER">
+        <pre-upgrade>
+          <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.FixNotebookStorage">
+            <summary>Adjusting Zeppelin Notebook properties</summary>
+          </task>
+        </pre-upgrade>
+        <pre-downgrade/>
         <upgrade>
           <task xsi:type="restart-task" />
         </upgrade>
@@ -966,6 +996,7 @@
         <pre-upgrade>
           <task xsi:type="configure" id="hdp_2_6_maint_ranger_storm_plugin_cluster_name"/>
           <task xsi:type="configure" id="storm_nimbus_autocred_config"/>
+          <task xsi:type="configure" id="storm_remove_jmxetric" supports-patch="true"/>
         </pre-upgrade>
         <pre-downgrade/> <!--  no-op to prevent config changes on downgrade -->
         <upgrade>
@@ -1036,6 +1067,11 @@
           <task xsi:type="configure" id="hdp_2_6_maint_ranger_atlas_plugin_cluster_name"/>
           <task xsi:type="configure" id="atlas_env_gc_worker"/>
           <task xsi:type="configure" id="hdp_2_6_atlas_kafka_auto_commit_enable_property_delete"/>
+          <task xsi:type="configure" id="atlas_log4j_update_logger_settings"/>
+          <task xsi:type="configure" id="atlas_hbase_conf_dir"/>
+          <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.AtlasProxyUserConfigCalculation" >
+            <summary>Applying Atlas proxy-user configurations.</summary>
+          </task>
         </pre-upgrade>
         <pre-downgrade/> <!--  no-op to prevent config changes on downgrade -->
         <upgrade>

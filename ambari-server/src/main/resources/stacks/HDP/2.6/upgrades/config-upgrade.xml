@@ -77,6 +77,27 @@
           </definition>
         </changes>
       </component>
+      <component name="HIVE_SERVER_INTERACTIVE">
+        <changes>
+          <definition xsi:type="configure" id="llap_update_tez_shuffle_ssl_enable" summary="Update additional LLAP-Tez settings">
+            <type>tez-interactive-site</type>
+            <set key="tez.runtime.shuffle.ssl.enable" value="false"/>
+          </definition>
+          <definition xsi:type="configure" id="hdp_2_6_maint_druid_config_for_hive_hook" summary="Updating druid hive related properties">
+            <type>hive-site</type>
+            <set key="hive.druid.metadata.password" value="{{druid_metadata_password}}" if-type="druid-common"/>
+            <set key="hive.druid.indexer.segments.granularity" value="DAY" if-type="druid-common"/>
+            <set key="hive.druid.indexer.partition.size.max" value="1000000" if-type="druid-common"/>
+            <set key="hive.druid.indexer.memory.rownum.max" value="75000" if-type="druid-common"/>
+            <set key="hive.druid.select.distribute" value="true" if-type="druid-common"/>
+            <set key="hive.druid.basePersistDirectory" value="" if-type="druid-common"/>
+            <set key="hive.druid.storage.storageDirectory" value="{{druid_storage_dir}}" if-type="druid-common"/>
+            <set key="hive.druid.passiveWaitTimeMs" value="30000" if-type="druid-common"/>
+            <set key="hive.druid.working.directory" value="/tmp/druid-indexing" if-type="druid-common"/>
+            <set key="hive.druid.bitmap.type" value="roaring" if-type="druid-common"/>
+          </definition>
+        </changes>
+      </component>
     </service>
 
     <service name="HBASE">
@@ -117,6 +138,12 @@
             <set key="nimbus.credential.renewers.classes" value="['org.apache.storm.hdfs.security.AutoHDFS', 'org.apache.storm.hbase.security.AutoHBase', 'org.apache.storm.hive.security.AutoHive']" if-type="streamline-common" if-key="authorizer.class.name" if-key-state="present"/>
             <set key="nimbus.credential.renewers.freq.secs" value="82800" if-type="streamline-common" if-key="authorizer.class.name" if-key-state="present"/>
           </definition>
+          <definition xsi:type="configure" id="storm_remove_jmxetric" summary="Removing jmxetric from childopts.">
+            <type>storm-site</type>
+            <regex-replace key="nimbus.childopts" find=" -javaagent:(.*)JVM" replace-with=""/>
+            <regex-replace key="supervisor.childopts" find=" -javaagent:(.*)JVM" replace-with=""/>
+            <regex-replace key="worker.childopts" find=" -javaagent:(.*)JVM" replace-with=""/>
+          </definition>
         </changes>
       </component>
     </service>
@@ -140,14 +167,29 @@
               if-key="yarn.resourcemanager.monitor.capacity.preemption.natural_termination_factor"
               if-key-state="absent" />
           </definition>
+
+          <definition xsi:type="configure" id="hdp_2_6_yarn_app_classpath_parameterization" summary="Application Classpath Parameterization">
+            <type>yarn-site</type>
+            <replace key="yarn.application.classpath" find="/usr/hdp/current/hadoop-client" replace-with="{{hadoop_home}}"/>
+          </definition>
         </changes>
       </component>
+
       <component name="NODEMANAGER">
         <changes>
           <definition xsi:type="configure" id="hdp_2_6_0_0_yarn_nodemanager_llap_mem">
             <type>yarn-site</type>
             <set key="yarn.nodemanager.kill-escape.launch-command-line" value="slider-agent,LLAP"/>
             <set key="yarn.nodemanager.kill-escape.user" value="hive"/>
+          </definition>
+        </changes>
+      </component>
+
+      <component name="APP_TIMELINE_SERVER">
+        <changes>
+          <definition xsi:type="configure" id="hdp_2_6_yarn_spark_versioned_classpaths">
+            <type>yarn-site</type>
+            <replace key="yarn.timeline-service.entity-group-fs-store.group-id-plugin-classpath" find="${hdp.version}/spark/" replace-with="{{spark_version}}/spark/"/>
           </definition>
         </changes>
       </component>
@@ -180,6 +222,15 @@
           <definition xsi:type="configure" id="hdp_2_6_atlas_kafka_auto_commit_enable_property_delete" summary="Updating Atlas Kafka configurations.">
             <type>application-properties</type>
             <transfer operation="delete" delete-key="atlas.kafka.auto.commit.enable"/>
+          </definition>
+          <definition xsi:type="configure" id="atlas_log4j_update_logger_settings" summary="Updating logger configurations for Atlas.">
+            <type>atlas-log4j</type>
+            <replace key="content" find="&lt;appender name=&quot;FILE&quot; class=&quot;org.apache.log4j.DailyRollingFileAppender&quot;&gt;" replace-with="&lt;appender name=&quot;FILE&quot; class=&quot;org.apache.log4j.RollingFileAppender&quot;&gt;"/>
+            <replace key="content" find="&lt;logger name=&quot;com.thinkaurelius.titan&quot; additivity=&quot;false&quot;&gt;&#x20;&#x20;&#x20;&#x20;&lt;level value=&quot;info&quot;/&gt;" replace-with="&lt;logger name=&quot;com.thinkaurelius.titan&quot; additivity=&quot;false&quot;&gt;&#xA;&#x20;&#x20;&#x20;&#x20;&lt;level value=&quot;warn&quot;/&gt;"/>
+          </definition>
+          <definition xsi:type="configure" id="atlas_hbase_conf_dir" summary="Adding configuration for hbase conf directory">
+            <type>atlas-env</type>
+            <set key="atlas.hbase.conf.dir" value="/etc/hbase/conf"/>
           </definition>
         </changes>
       </component>
@@ -216,6 +267,29 @@
             <type>spark2-thrift-sparkconf</type>
             <set key="spark.yarn.executor.failuresValidityInterval" value="2h"/>
             <set key="spark.yarn.maxAppAttempts" value="1"/>
+          </definition>
+        </changes>
+      </component>
+    </service>
+
+    <service name="TEZ">
+      <component name="TEZ_CLIENT">
+        <changes>
+          <definition xsi:type="configure" id="hdp_2_6_tez_tarball_ld_library">
+            <type>tez-site</type>
+            <set key="tez.am.launch.env" value="LD_LIBRARY_PATH=/usr/hdp/${hdp.version}/hadoop/lib/native:/usr/hdp/${hdp.version}/hadoop/lib/native/Linux-{{architecture}}-64:./tezlib/lib/native:./tezlib/lib/native/Linux-{{architecture}}-64" />
+            <set key="tez.task.launch.env" value="LD_LIBRARY_PATH=/usr/hdp/${hdp.version}/hadoop/lib/native:/usr/hdp/${hdp.version}/hadoop/lib/native/Linux-{{architecture}}-64:./tezlib/lib/native:./tezlib/lib/native/Linux-{{architecture}}-64" />
+          </definition>
+        </changes>
+      </component>
+    </service>
+
+    <service name="MAPREDUCE2">
+      <component name="MAPREDUCE2_CLIENT">
+        <changes>
+          <definition xsi:type="configure" id="hdp_2_6_mapreduce_tarball_ld_library">
+            <type>mapred-site</type>
+            <set key="mapreduce.admin.user.env" value="LD_LIBRARY_PATH={{hadoop_lib_home}}/native:{{hadoop_lib_home}}/native/Linux-{{architecture}}-64:./mr-framework/hadoop/lib/native:./mr-framework/hadoop/lib/native/Linux-{{architecture}}-64" />
           </definition>
         </changes>
       </component>

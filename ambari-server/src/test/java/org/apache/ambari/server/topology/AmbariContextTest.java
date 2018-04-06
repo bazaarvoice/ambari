@@ -31,6 +31,7 @@ import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -54,11 +55,15 @@ import org.apache.ambari.server.controller.internal.HostComponentResourceProvide
 import org.apache.ambari.server.controller.internal.HostResourceProvider;
 import org.apache.ambari.server.controller.internal.ServiceResourceProvider;
 import org.apache.ambari.server.controller.internal.Stack;
+import org.apache.ambari.server.controller.internal.VersionDefinitionResourceProvider;
 import org.apache.ambari.server.controller.predicate.EqualsPredicate;
 import org.apache.ambari.server.controller.spi.ClusterController;
 import org.apache.ambari.server.controller.spi.Predicate;
 import org.apache.ambari.server.controller.spi.Request;
+import org.apache.ambari.server.controller.spi.RequestStatus;
 import org.apache.ambari.server.controller.spi.Resource;
+import org.apache.ambari.server.orm.dao.RepositoryVersionDAO;
+import org.apache.ambari.server.orm.entities.RepositoryVersionEntity;
 import org.apache.ambari.server.state.Cluster;
 import org.apache.ambari.server.state.Clusters;
 import org.apache.ambari.server.state.Config;
@@ -66,6 +71,7 @@ import org.apache.ambari.server.state.ConfigFactory;
 import org.apache.ambari.server.state.ConfigHelper;
 import org.apache.ambari.server.state.DesiredConfig;
 import org.apache.ambari.server.state.Host;
+import org.apache.ambari.server.state.RepositoryType;
 import org.apache.ambari.server.state.Service;
 import org.apache.ambari.server.state.StackId;
 import org.apache.ambari.server.state.configgroup.ConfigGroup;
@@ -118,14 +124,14 @@ public class AmbariContextTest {
   private static final ConfigFactory configFactory = createNiceMock(ConfigFactory.class);
   private static final Service mockService1 = createStrictMock(Service.class);
 
-  private static final Collection<String> blueprintServices = new HashSet<String>();
-  private static final Map<String, Service> clusterServices = new HashMap<String, Service>();
-  private static final Map<Long, ConfigGroup> configGroups = new HashMap<Long, ConfigGroup>();
+  private static final Collection<String> blueprintServices = new HashSet<>();
+  private static final Map<String, Service> clusterServices = new HashMap<>();
+  private static final Map<Long, ConfigGroup> configGroups = new HashMap<>();
   private Configuration bpConfiguration = null;
   private Configuration group1Configuration = null;
   private static final Collection<String> group1Hosts = Arrays.asList(HOST1, HOST2);
 
-  private Capture<Set<ConfigGroupRequest>> configGroupRequestCapture = new Capture<Set<ConfigGroupRequest>>();
+  private Capture<Set<ConfigGroupRequest>> configGroupRequestCapture = new Capture<>();
 
   @Before
   public void setUp() throws Exception {
@@ -156,26 +162,26 @@ public class AmbariContextTest {
     f.set(null, hostComponentResourceProvider);
 
     // bp configuration
-    Map<String, Map<String, String>> bpProperties = new HashMap<String, Map<String, String>>();
-    Map<String, String> bpType1Props = new HashMap<String, String>();
+    Map<String, Map<String, String>> bpProperties = new HashMap<>();
+    Map<String, String> bpType1Props = new HashMap<>();
     bpProperties.put("type1", bpType1Props);
     bpType1Props.put("prop1", "val1");
     bpType1Props.put("prop2", "val2");
     bpConfiguration = new Configuration(bpProperties, null);
 
     // host group 1 configuration
-    Map<String, Map<String, String>> group1Properties = new HashMap<String, Map<String, String>>();
-    Map<String, String> type1Props = new HashMap<String, String>();
+    Map<String, Map<String, String>> group1Properties = new HashMap<>();
+    Map<String, String> type1Props = new HashMap<>();
     group1Properties.put("type1", type1Props);
     type1Props.put("prop1", "val1.2");
     type1Props.put("prop3", "val3");
     group1Configuration = new Configuration(group1Properties, null, bpConfiguration);
 
-    Map<String, String> group1ResolvedProperties = new HashMap<String, String>(bpType1Props);
+    Map<String, String> group1ResolvedProperties = new HashMap<>(bpType1Props);
     group1ResolvedProperties.putAll(type1Props);
 
     // config type -> service mapping
-    Map<String, String> configTypeServiceMapping = new HashMap<String, String>();
+    Map<String, String> configTypeServiceMapping = new HashMap<>();
     configTypeServiceMapping.put("type1", "service1");
 
     // config groups
@@ -201,6 +207,18 @@ public class AmbariContextTest {
         EasyMock.<Map<String, Map<String, String>>> anyObject())).andReturn(
             type1Service1).anyTimes();
     replay(type1Service1);
+
+    RepositoryVersionDAO repositoryVersionDAO = createNiceMock(RepositoryVersionDAO.class);
+    RepositoryVersionEntity repositoryVersion = createNiceMock(RepositoryVersionEntity.class);
+    expect(repositoryVersion.getId()).andReturn(1L).atLeastOnce();
+    expect(repositoryVersion.getVersion()).andReturn("1.1.1.1").atLeastOnce();
+    expect(repositoryVersion.getType()).andReturn(RepositoryType.STANDARD).atLeastOnce();
+
+    expect(repositoryVersionDAO.findByStack(EasyMock.anyObject(StackId.class))).andReturn(
+        Collections.singletonList(repositoryVersion)).atLeastOnce();
+    replay(repositoryVersionDAO, repositoryVersion);
+
+    context.repositoryVersionDAO = repositoryVersionDAO;
 
     context.configFactory = configFactory;
 
@@ -270,23 +288,23 @@ public class AmbariContextTest {
   @Test
   public void testCreateAmbariResources() throws Exception {
     // expectations
-    Capture<ClusterRequest> clusterRequestCapture = new Capture<ClusterRequest>();
+    Capture<ClusterRequest> clusterRequestCapture = new Capture<>();
     controller.createCluster(capture(clusterRequestCapture));
     expectLastCall().once();
     expect(cluster.getServices()).andReturn(clusterServices).anyTimes();
 
-    Capture<Set<ServiceRequest>> serviceRequestCapture = new Capture<Set<ServiceRequest>>();
-    Capture<Set<ServiceComponentRequest>> serviceComponentRequestCapture = new Capture<Set<ServiceComponentRequest>>();
+    Capture<Set<ServiceRequest>> serviceRequestCapture = new Capture<>();
+    Capture<Set<ServiceComponentRequest>> serviceComponentRequestCapture = new Capture<>();
 
     serviceResourceProvider.createServices(capture(serviceRequestCapture));
     expectLastCall().once();
     componentResourceProvider.createComponents(capture(serviceComponentRequestCapture));
     expectLastCall().once();
 
-    Capture<Request> serviceInstallRequestCapture = new Capture<Request>();
-    Capture<Request> serviceStartRequestCapture = new Capture<Request>();
-    Capture<Predicate> installPredicateCapture = new Capture<Predicate>();
-    Capture<Predicate> startPredicateCapture = new Capture<Predicate>();
+    Capture<Request> serviceInstallRequestCapture = new Capture<>();
+    Capture<Request> serviceStartRequestCapture = new Capture<>();
+    Capture<Predicate> installPredicateCapture = new Capture<>();
+    Capture<Predicate> startPredicateCapture = new Capture<>();
 
     expect(serviceResourceProvider.updateResources(capture(serviceInstallRequestCapture),
         capture(installPredicateCapture))).andReturn(null).once();
@@ -296,7 +314,7 @@ public class AmbariContextTest {
     replayAll();
 
     // test
-    context.createAmbariResources(topology, CLUSTER_NAME, null, null);
+    context.createAmbariResources(topology, CLUSTER_NAME, null, null, null);
 
     // assertions
     ClusterRequest clusterRequest = clusterRequestCapture.getValue();
@@ -305,7 +323,7 @@ public class AmbariContextTest {
 
     Collection<ServiceRequest> serviceRequests = serviceRequestCapture.getValue();
     assertEquals(2, serviceRequests.size());
-    Collection<String> servicesFound = new HashSet<String>();
+    Collection<String> servicesFound = new HashSet<>();
     for (ServiceRequest serviceRequest : serviceRequests) {
       servicesFound.add(serviceRequest.getServiceName());
       assertEquals(CLUSTER_NAME, serviceRequest.getClusterName());
@@ -315,13 +333,13 @@ public class AmbariContextTest {
 
     Collection<ServiceComponentRequest> serviceComponentRequests = serviceComponentRequestCapture.getValue();
     assertEquals(3, serviceComponentRequests.size());
-    Map<String, Collection<String>> foundServiceComponents = new HashMap<String, Collection<String>>();
+    Map<String, Collection<String>> foundServiceComponents = new HashMap<>();
     for (ServiceComponentRequest componentRequest : serviceComponentRequests) {
       assertEquals(CLUSTER_NAME, componentRequest.getClusterName());
       String serviceName = componentRequest.getServiceName();
       Collection<String> serviceComponents = foundServiceComponents.get(serviceName);
       if (serviceComponents == null) {
-        serviceComponents = new HashSet<String>();
+        serviceComponents = new HashSet<>();
         foundServiceComponents.put(serviceName, serviceComponents);
       }
       serviceComponents.add(componentRequest.getComponentName());
@@ -342,7 +360,7 @@ public class AmbariContextTest {
     Map<String, Object> installProperties = installPropertiesSet.iterator().next();
     assertEquals(CLUSTER_NAME, installProperties.get(ServiceResourceProvider.SERVICE_CLUSTER_NAME_PROPERTY_ID));
     assertEquals("INSTALLED", installProperties.get(ServiceResourceProvider.SERVICE_SERVICE_STATE_PROPERTY_ID));
-    assertEquals(new EqualsPredicate<String>(ServiceResourceProvider.SERVICE_CLUSTER_NAME_PROPERTY_ID, CLUSTER_NAME),
+    assertEquals(new EqualsPredicate<>(ServiceResourceProvider.SERVICE_CLUSTER_NAME_PROPERTY_ID, CLUSTER_NAME),
         installPredicateCapture.getValue());
 
     Request startRequest = serviceStartRequestCapture.getValue();
@@ -351,7 +369,7 @@ public class AmbariContextTest {
     Map<String, Object> startProperties = startPropertiesSet.iterator().next();
     assertEquals(CLUSTER_NAME, startProperties.get(ServiceResourceProvider.SERVICE_CLUSTER_NAME_PROPERTY_ID));
     assertEquals("STARTED", startProperties.get(ServiceResourceProvider.SERVICE_SERVICE_STATE_PROPERTY_ID));
-    assertEquals(new EqualsPredicate<String>(ServiceResourceProvider.SERVICE_CLUSTER_NAME_PROPERTY_ID, CLUSTER_NAME),
+    assertEquals(new EqualsPredicate<>(ServiceResourceProvider.SERVICE_CLUSTER_NAME_PROPERTY_ID, CLUSTER_NAME),
         installPredicateCapture.getValue());
   }
 
@@ -555,7 +573,7 @@ public class AmbariContextTest {
     testClusterEnvDesiredConfig.setTag(topologyResolvedState);
 
     Map<String, DesiredConfig> testDesiredConfigs =
-      new HashMap<String, DesiredConfig>();
+      new HashMap<>();
     testDesiredConfigs.put("hdfs-site", testHdfsDesiredConfig);
     testDesiredConfigs.put("core-site", testCoreSiteDesiredConfig);
     testDesiredConfigs.put("cluster-env", testClusterEnvDesiredConfig);
@@ -565,7 +583,7 @@ public class AmbariContextTest {
     replayAll();
 
     Set<String> testUpdatedConfigTypes =
-      new HashSet<String>();
+      new HashSet<>();
     testUpdatedConfigTypes.add("hdfs-site");
     testUpdatedConfigTypes.add("core-site");
     testUpdatedConfigTypes.add("cluster-env");
@@ -679,5 +697,109 @@ public class AmbariContextTest {
     assertFalse(topologyResolved);
   }
 
+  @Test
+  public void testCreateAmbariResourcesNoVersions() throws Exception {
+
+    VersionDefinitionResourceProvider vdfResourceProvider = createNiceMock(VersionDefinitionResourceProvider.class);
+    Class<AmbariContext> clazz = AmbariContext.class;
+    Field f = clazz.getDeclaredField("versionDefinitionResourceProvider");
+    f.setAccessible(true);
+    f.set(null, vdfResourceProvider);
+
+    Resource resource = createNiceMock(Resource.class);
+    expect(resource.getPropertyValue(VersionDefinitionResourceProvider.VERSION_DEF_ID)).andReturn(1L).atLeastOnce();
+
+    RequestStatus requestStatus = createNiceMock(RequestStatus.class);
+    expect(requestStatus.getAssociatedResources()).andReturn(Collections.singleton(resource)).atLeastOnce();
+
+    expect(vdfResourceProvider.createResources(EasyMock.anyObject(Request.class))).andReturn(requestStatus);
+
+    RepositoryVersionDAO repositoryVersionDAO = createNiceMock(RepositoryVersionDAO.class);
+    RepositoryVersionEntity repositoryVersion = createNiceMock(RepositoryVersionEntity.class);
+    expect(repositoryVersion.getId()).andReturn(1L).atLeastOnce();
+    expect(repositoryVersion.getVersion()).andReturn("1.1.1.1").atLeastOnce();
+    expect(repositoryVersion.getType()).andReturn(RepositoryType.STANDARD).atLeastOnce();
+
+    expect(repositoryVersionDAO.findByStack(EasyMock.anyObject(StackId.class))).andReturn(
+        Collections.<RepositoryVersionEntity>emptyList()).atLeastOnce();
+    expect(repositoryVersionDAO.findByPK(EasyMock.anyLong())).andReturn(repositoryVersion);
+
+    replay(repositoryVersionDAO, repositoryVersion, resource, requestStatus, vdfResourceProvider);
+
+    context.repositoryVersionDAO = repositoryVersionDAO;
+
+    controller.createCluster(capture(Capture.<ClusterRequest>newInstance()));
+    expectLastCall().once();
+    expect(cluster.getServices()).andReturn(clusterServices).anyTimes();
+
+    serviceResourceProvider.createServices(capture(Capture.<Set<ServiceRequest>>newInstance()));
+    expectLastCall().once();
+    componentResourceProvider.createComponents(capture(Capture.<Set<ServiceComponentRequest>>newInstance()));
+    expectLastCall().once();
+
+    expect(serviceResourceProvider.updateResources(
+        capture(Capture.<Request>newInstance()), capture(Capture.<Predicate>newInstance()))).andReturn(null).atLeastOnce();
+
+    replayAll();
+
+    // test
+    context.createAmbariResources(topology, CLUSTER_NAME, null, null, null);
+  }
+
+  @Test
+  public void testCreateAmbariResourcesManyVersions() throws Exception {
+
+    RepositoryVersionDAO repositoryVersionDAO = createNiceMock(RepositoryVersionDAO.class);
+    RepositoryVersionEntity repositoryVersion1 = createNiceMock(RepositoryVersionEntity.class);
+    expect(repositoryVersion1.getId()).andReturn(1L).atLeastOnce();
+    expect(repositoryVersion1.getVersion()).andReturn("1.1.1.1").atLeastOnce();
+    expect(repositoryVersion1.getType()).andReturn(RepositoryType.STANDARD).atLeastOnce();
+
+    RepositoryVersionEntity repositoryVersion2 = createNiceMock(RepositoryVersionEntity.class);
+    expect(repositoryVersion2.getId()).andReturn(2L).atLeastOnce();
+    expect(repositoryVersion2.getVersion()).andReturn("1.1.2.2").atLeastOnce();
+    expect(repositoryVersion2.getType()).andReturn(RepositoryType.STANDARD).atLeastOnce();
+
+    expect(repositoryVersionDAO.findByStack(EasyMock.anyObject(StackId.class))).andReturn(
+        Arrays.asList(repositoryVersion1, repositoryVersion2)).atLeastOnce();
+    replay(repositoryVersionDAO, repositoryVersion1, repositoryVersion2);
+
+    context.repositoryVersionDAO = repositoryVersionDAO;
+
+    replayAll();
+
+    // test
+    try {
+      context.createAmbariResources(topology, CLUSTER_NAME, null, null, null);
+      fail("Expected failure when several versions are found");
+    } catch (IllegalArgumentException e) {
+      assertEquals(
+          "Several repositories were found for testStack-testVersion:  1.1.1.1, 1.1.2.2.  Specify the version with 'repository_version'",
+          e.getMessage());
+    }
+  }
+
+  @Test
+  public void testCreateAmbariResourcesBadVersion() throws Exception {
+
+    RepositoryVersionDAO repositoryVersionDAO = createNiceMock(RepositoryVersionDAO.class);
+    expect(repositoryVersionDAO.findByStackAndVersion(EasyMock.anyObject(StackId.class),
+        EasyMock.anyString())).andReturn(null).atLeastOnce();
+    replay(repositoryVersionDAO);
+
+    context.repositoryVersionDAO = repositoryVersionDAO;
+
+    replayAll();
+
+    // test
+    try {
+      context.createAmbariResources(topology, CLUSTER_NAME, null, "xyz", null);
+      fail("Expected failure when a bad version is provided");
+    } catch (IllegalArgumentException e) {
+      assertEquals(
+          "Could not identify repository version with stack testStack-testVersion and version xyz for installing services. Specify a valid version with 'repository_version'",
+          e.getMessage());
+    }
+  }
 
 }

@@ -32,6 +32,9 @@ App.Repository = DS.Model.extend({
   stackName: DS.attr('string'),
   stackVersion: DS.attr('string'),
   operatingSystem: DS.belongsTo('App.OperatingSystem'),
+  components: DS.attr('string'),
+  distribution: DS.attr('string'),
+  tags: DS.attr('array'),
 
   validation: DS.attr('string', {defaultValue: ''}),
   errorContent: DS.attr('string', {defaultValue: ''}),
@@ -44,7 +47,7 @@ App.Repository = DS.Model.extend({
   }.property('baseUrl'),
 
   isEmpty: function() {
-    return this.get('baseUrl') == '';
+    return this.get('showRepo') && this.get('baseUrl') === '';
   }.property('baseUrl'),
 
   invalidError: function() {
@@ -57,6 +60,22 @@ App.Repository = DS.Model.extend({
   isUtils: function () {
     return this.get('repoName').contains('UTILS');
   }.property('repoName'),
+
+  /**
+   * @type {boolean}
+   */
+  isGPL: function () {
+    return this.get('tags') && this.get('tags').contains('GPL');
+  }.property('tags'),
+
+  /**
+   * Determines whether a repo needs to be displayed in the UI or not
+   * @type {boolean}
+   */
+  showRepo: function () {
+    const isGPLAccepted = App.router.get('clusterController.ambariProperties')['gpl.license.accepted'] === 'true';
+    return isGPLAccepted || !this.get('isGPL');
+  }.property('isGPL'),
 
   undo: Em.computed.notEqualProperties('baseUrl', 'baseUrlInit'),
 

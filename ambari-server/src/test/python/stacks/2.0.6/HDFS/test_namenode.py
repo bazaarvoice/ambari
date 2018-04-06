@@ -35,6 +35,8 @@ class TestNamenode(RMFTestCase):
   STACK_VERSION = "2.0.6"
   DEFAULT_IMMUTABLE_PATHS = ['/apps/hive/warehouse', '/apps/falcon', '/mr-history/done', '/app-logs', '/tmp']
 
+  CONFIG_OVERRIDES = {"serviceName":"HDFS", "role":"NAMENODE"}
+
   def test_configure_default(self):
     self.executeScript(self.COMMON_SERVICES_PACKAGE_DIR + "/scripts/namenode.py",
                        classname = "NameNode",
@@ -1255,7 +1257,7 @@ class TestNamenode(RMFTestCase):
                        call_mocks=[(1, "no kinit")]
     )
     tempdir = tempfile.gettempdir()
-    ccache_path =  os.path.join(tempfile.gettempdir(), "hdfs_rebalance_cc_7add60ca651f1bd1ed909a6668937ba9")
+    ccache_path =  os.path.join(tempfile.gettempdir(), "hdfs_rebalance_cc_676e87466798ee1b4128732da3effe26e7dfc902e2c9ebdfde4331d2")
     kinit_cmd = "/usr/bin/kinit -c {0} -kt /etc/security/keytabs/hdfs.headless.keytab hdfs@EXAMPLE.COM".format(ccache_path)
     rebalance_cmd = "ambari-sudo.sh su hdfs -l -s /bin/bash -c 'export  PATH=/bin:/usr/bin KRB5CCNAME={0} ; hdfs --config /etc/hadoop/conf balancer -threshold -1'".format(ccache_path)
 
@@ -1348,17 +1350,14 @@ class TestNamenode(RMFTestCase):
                        config_file = "nn_eu_standby.json",
                        stack_version = self.STACK_VERSION,
                        target = RMFTestCase.TARGET_COMMON_SERVICES,
-                       call_mocks = [(0, None), (0, None, ''), (0, None)] ,
                        mocks_dict=mocks_dict)
 
-    calls = mocks_dict['call'].call_args_list
-    self.assertTrue(len(calls) >= 1)
-    self.assertTrue(calls[0].startsWith("conf-select create-conf-dir --package hadoop --stack-version 2.3.2.0-2844 --conf-version 0"))
 
 
   @patch("hdfs_namenode.is_this_namenode_active")
   @patch("resource_management.libraries.functions.setup_ranger_plugin_xml.setup_ranger_plugin")
   @patch("utils.get_namenode_states")
+  @patch("resource_management.core.sudo.path_isdir", new = MagicMock(return_value = True))
   def test_upgrade_restart_eu_with_ranger(self, get_namenode_states_mock, setup_ranger_plugin_mock, is_active_nn_mock):
     is_active_nn_mock.return_value = True
 
@@ -1401,6 +1400,7 @@ class TestNamenode(RMFTestCase):
                        classname = "NameNode",
                        command = "pre_upgrade_restart",
                        config_dict = json_content,
+                       config_overrides = self.CONFIG_OVERRIDES,
                        stack_version = self.STACK_VERSION,
                        target = RMFTestCase.TARGET_COMMON_SERVICES)
     self.assertResourceCalled('Execute',
@@ -1422,12 +1422,11 @@ class TestNamenode(RMFTestCase):
                        classname = "NameNode",
                        command = "pre_upgrade_restart",
                        config_dict = json_content,
+                       config_overrides = self.CONFIG_OVERRIDES,
                        stack_version = self.STACK_VERSION,
                        target = RMFTestCase.TARGET_COMMON_SERVICES,
-                       call_mocks = [(0, None, None), (0, None), (0, None)],
                        mocks_dict = mocks_dict)
 
-    self.assertResourceCalled('Link', '/etc/hadoop/conf', to='/usr/hdp/current/hadoop-client/conf')
     self.assertResourceCalled('Execute', ('ambari-python-wrap', '/usr/bin/hdp-select', 'set', 'hadoop-hdfs-namenode', version), sudo=True)
     self.assertNoMoreResources()
 
@@ -1615,6 +1614,7 @@ class TestNamenode(RMFTestCase):
     self.assertEquals("/usr/lib/hadoop/sbin", sys.modules["params"].hadoop_bin)
 
   @patch.object(shell, "call")
+  @patch("resource_management.core.sudo.path_isdir", new = MagicMock(return_value = True))
   def test_pre_upgrade_restart_22_params(self, call_mock):
     config_file = self.get_src_folder()+"/test/python/stacks/2.0.6/configs/nn_ru_lzo.json"
     with open(config_file, "r") as f:
@@ -1635,7 +1635,7 @@ class TestNamenode(RMFTestCase):
                        call_mocks = [(0, None), (0, None), (0, None), (0, None), (0, None), (0, None), (0, None)],
                        mocks_dict = mocks_dict)
     import sys
-    self.assertEquals("/usr/hdp/current/hadoop-client/conf", sys.modules["params"].hadoop_conf_dir)
+    self.assertEquals("/etc/hadoop/conf", sys.modules["params"].hadoop_conf_dir)
     self.assertEquals("/usr/hdp/{0}/hadoop/libexec".format(version), sys.modules["params"].hadoop_libexec_dir)
     self.assertEquals("/usr/hdp/{0}/hadoop/bin".format(version), sys.modules["params"].hadoop_bin_dir)
     self.assertEquals("/usr/hdp/{0}/hadoop/sbin".format(version), sys.modules["params"].hadoop_bin)
@@ -1660,11 +1660,8 @@ class TestNamenode(RMFTestCase):
                        config_dict = json_content,
                        stack_version = self.STACK_VERSION,
                        target = RMFTestCase.TARGET_COMMON_SERVICES,
-                       call_mocks = itertools.cycle([(0, None, None)]),
                        mocks_dict = mocks_dict)
 
-    self.assertResourceCalled('Link', '/etc/hadoop/conf',
-      to = '/usr/hdp/current/hadoop-client/conf')
 
     import sys
     self.assertEquals("/usr/hdp/2.3.0.0-1234/hadoop/conf", sys.modules["params"].hadoop_conf_dir)
@@ -1674,6 +1671,7 @@ class TestNamenode(RMFTestCase):
 
 
   @patch("namenode_upgrade.create_upgrade_marker", MagicMock())
+  @patch("resource_management.core.sudo.path_isdir", new = MagicMock(return_value = True))
   def test_express_upgrade_skips_safemode_and_directory_creation(self):
     """
     Tests that we wait for Safemode to be OFF no matter what except for EU. And, because of that,

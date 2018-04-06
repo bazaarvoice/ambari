@@ -55,8 +55,6 @@ public class ClusterRequest {
    */
   private final Map<String, Object> sessionAttributes;
 
-  private String repositoryVersion = null;
-
 
   // ----- Constructors ------------------------------------------------------
 
@@ -240,19 +238,4 @@ public class ClusterRequest {
   public void setServiceConfigVersionRequest(ServiceConfigVersionRequest serviceConfigVersionRequest) {
     this.serviceConfigVersionRequest = serviceConfigVersionRequest;
   }
-
-  /**
-   * @param version the repo version to use
-   */
-  public void setRepositoryVersion(String version) {
-    repositoryVersion = version;
-  }
-
-  /**
-   * @return the repo version to use
-   */
-  public String getRepositoryVersion() {
-    return repositoryVersion;
-  }
-
 }

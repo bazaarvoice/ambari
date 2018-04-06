@@ -29,10 +29,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 
 import org.apache.ambari.server.AmbariException;
@@ -42,7 +45,6 @@ import org.apache.ambari.server.api.services.stackadvisor.StackAdvisorBlueprintP
 import org.apache.ambari.server.configuration.Configuration;
 import org.apache.ambari.server.controller.AmbariServer;
 import org.apache.ambari.server.controller.RequestStatusResponse;
-import org.apache.ambari.server.controller.ShortTaskStatus;
 import org.apache.ambari.server.controller.internal.ArtifactResourceProvider;
 import org.apache.ambari.server.controller.internal.BaseClusterRequest;
 import org.apache.ambari.server.controller.internal.CalculatedStatus;
@@ -75,10 +77,12 @@ import org.apache.ambari.server.state.quicklinksprofile.QuickLinksProfile;
 import org.apache.ambari.server.topology.tasks.ConfigureClusterTask;
 import org.apache.ambari.server.topology.tasks.ConfigureClusterTaskFactory;
 import org.apache.ambari.server.topology.validators.TopologyValidatorService;
+import org.apache.ambari.server.utils.ManagedThreadPoolExecutor;
 import org.apache.ambari.server.utils.RetryHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Function;
 import com.google.common.eventbus.Subscribe;
 import com.google.inject.Singleton;
 import com.google.inject.persist.Transactional;
@@ -99,21 +103,32 @@ public class TopologyManager {
   public static final String TOPOLOGY_RESOLVED_TAG = "TOPOLOGY_RESOLVED";
   public static final String KDC_ADMIN_CREDENTIAL = "kdc.admin.credential";
 
-  private static final String CLUSTER_ENV_CONFIG_TYPE_NAME = "cluster-env";
-  private static final String CLUSTER_CONFIG_TASK_MAX_TIME_IN_MILLIS_PROPERTY_NAME = "cluster_configure_task_timeout";
-
   private PersistedState persistedState;
+
+  /**
+   * Single threaded executor to execute async tasks. At the moment it's only used to execute ConfigureClusterTask.
+   */
   private final ExecutorService executor = Executors.newSingleThreadExecutor();
-  private final Executor taskExecutor; // executes TopologyTasks
-  private final boolean parallelTaskCreationEnabled;
-  private Collection<String> hostsToIgnore = new HashSet<String>();
-  private final List<HostImpl> availableHosts = new LinkedList<HostImpl>();
-  private final Map<String, LogicalRequest> reservedHosts = new HashMap<String, LogicalRequest>();
-  private final Map<Long, LogicalRequest> allRequests = new HashMap<Long, LogicalRequest>();
+
+  /**
+   * Thread pool size for topology task executors.
+   */
+  private int topologyTaskExecutorThreadPoolSize;
+  /**
+   * There is one ExecutorService for each cluster to execute TopologyTasks.
+   * TopologyTasks are submitted into ExecutorService for each cluster,
+   * however the ExecutorService is started only after cluster configuration is finished.
+   */
+  private final Map<Long, ManagedThreadPoolExecutor> topologyTaskExecutorServiceMap = new HashMap<>();
+
+  private Collection<String> hostsToIgnore = new HashSet<>();
+  private final List<HostImpl> availableHosts = new LinkedList<>();
+  private final Map<String, LogicalRequest> reservedHosts = new HashMap<>();
+  private final Map<Long, LogicalRequest> allRequests = new HashMap<>();
   // priority is given to oldest outstanding requests
-  private final Collection<LogicalRequest> outstandingRequests = new ArrayList<LogicalRequest>();
+  private final Collection<LogicalRequest> outstandingRequests = new ArrayList<>();
   //todo: currently only support a single cluster
-  private Map<Long, ClusterTopology> clusterTopologyMap = new HashMap<Long, ClusterTopology>();
+  private Map<Long, ClusterTopology> clusterTopologyMap = new HashMap<>();
 
   @Inject
   private StackAdvisorBlueprintProcessor stackAdvisorBlueprintProcessor;
@@ -159,17 +174,15 @@ public class TopologyManager {
   private Map<Long, Boolean> clusterProvisionWithBlueprintCreationFinished = new HashMap<>();
 
   public TopologyManager() {
-    parallelTaskCreationEnabled = false;
-    taskExecutor = executor;
+    topologyTaskExecutorThreadPoolSize = 1;
   }
 
   @Inject
   public TopologyManager(Configuration configuration) {
-    int threadPoolSize = configuration.getParallelTopologyTaskCreationThreadPoolSize();
-    parallelTaskCreationEnabled = configuration.isParallelTopologyTaskCreationEnabled() && threadPoolSize > 1;
-    taskExecutor = parallelTaskCreationEnabled
-      ? Executors.newFixedThreadPool(threadPoolSize)
-      : executor;
+    topologyTaskExecutorThreadPoolSize = configuration.getParallelTopologyTaskCreationThreadPoolSize();
+    if (!configuration.isParallelTopologyTaskCreationEnabled()) {
+      topologyTaskExecutorThreadPoolSize = 1;
+    }
   }
 
   // executed by the IoC framework after creating the object (guice)
@@ -266,6 +279,7 @@ public class TopologyManager {
     final String clusterName = request.getClusterName();
     final Stack stack = topology.getBlueprint().getStack();
     final String repoVersion = request.getRepositoryVersion();
+    final Long repoVersionID = request.getRepositoryVersionId();
 
     // get the id prior to creating ambari resources which increments the counter
     final Long provisionId = ambariContext.getNextRequestId();
@@ -291,7 +305,7 @@ public class TopologyManager {
     topologyValidatorService.validateTopologyConfiguration(topology);
 
     // create resources
-    ambariContext.createAmbariResources(topology, clusterName, securityType, repoVersion);
+    ambariContext.createAmbariResources(topology, clusterName, securityType, repoVersion, repoVersionID);
 
     if (securityConfiguration != null && securityConfiguration.getDescriptor() != null) {
       submitKerberosDescriptorAsArtifact(clusterName, securityConfiguration.getDescriptor());
@@ -309,6 +323,10 @@ public class TopologyManager {
     // set provision action requested
     topology.setProvisionAction(request.getProvisionAction());
 
+
+    // create task executor for TopologyTasks
+    getOrCreateTopologyTaskExecutor(clusterId);
+
     // persist request
     LogicalRequest logicalRequest = RetryHelper.executeWithRetry(new Callable<LogicalRequest>() {
         @Override
@@ -321,18 +339,8 @@ public class TopologyManager {
 
     clusterTopologyMap.put(clusterId, topology);
 
-    addClusterConfigRequest(topology, new ClusterConfigurationRequest(ambariContext, topology, true,
+    addClusterConfigRequest(logicalRequest, topology, new ClusterConfigurationRequest(ambariContext, topology, true,
       stackAdvisorBlueprintProcessor, securityType == SecurityType.KERBEROS));
-
-
-    // Notify listeners that cluster configuration finished
-    executor.submit(new Callable<Boolean>() {
-      @Override
-      public Boolean call() throws Exception {
-        ambariEventPublisher.publish(new ClusterConfigFinishedEvent(clusterName));
-        return Boolean.TRUE;
-      }
-    });
 
     // Process the logical request
     processRequest(request, topology, logicalRequest);
@@ -343,6 +351,17 @@ public class TopologyManager {
     ambariContext.persistInstallStateForUI(clusterName, stack.getName(), stack.getVersion());
     clusterProvisionWithBlueprintCreateRequests.put(clusterId, logicalRequest);
     return getRequestStatus(logicalRequest.getRequestId());
+  }
+
+  @Subscribe
+  public void onClusterConfigFinishedEvent(ClusterConfigFinishedEvent event) {
+    ManagedThreadPoolExecutor taskExecutor = topologyTaskExecutorServiceMap.get(event.getClusterId());
+    if (taskExecutor == null) {
+      LOG.error("Can't find executor service taskQueue not found for cluster: {} ", event.getClusterName());
+    } else {
+      LOG.info("Starting topology task ExecutorService for cluster: {}", event.getClusterName());
+      taskExecutor.start();
+    }
   }
 
 
@@ -479,6 +498,9 @@ public class TopologyManager {
 
     hostNameCheck(request, topology);
     request.setClusterId(clusterId);
+    if (ambariContext.isTopologyResolved(clusterId)) {
+      getOrCreateTopologyTaskExecutor(clusterId).start();
+    }
 
     // this registers/updates all request host groups
     topology.update(request);
@@ -598,7 +620,7 @@ public class TopologyManager {
     PersistedTopologyRequest persistedRequest = persistedState.persistTopologyRequest(request);
 
     LogicalRequest logicalRequest = createLogicalRequest(persistedRequest, topology, logicalRequestId);
-    
+
     return logicalRequest;
   }
 
@@ -711,7 +733,7 @@ public class TopologyManager {
     if (requestIds.isEmpty()) {
       return allRequests.values();
     } else {
-      Collection<LogicalRequest> matchingRequests = new ArrayList<LogicalRequest>();
+      Collection<LogicalRequest> matchingRequests = new ArrayList<>();
       for (long id : requestIds) {
         LogicalRequest request = allRequests.get(id);
         if (request != null) {
@@ -728,7 +750,7 @@ public class TopologyManager {
    */
   public Collection<StageEntity> getStages() {
     ensureInitialized();
-    Collection<StageEntity> stages = new ArrayList<StageEntity>();
+    Collection<StageEntity> stages = new ArrayList<>();
     for (LogicalRequest logicalRequest : allRequests.values()) {
       stages.addAll(logicalRequest.getStageEntities());
     }
@@ -743,7 +765,7 @@ public class TopologyManager {
 
   public Collection<HostRoleCommand> getTasks(Collection<Long> requestIds) {
     ensureInitialized();
-    Collection<HostRoleCommand> tasks = new ArrayList<HostRoleCommand>();
+    Collection<HostRoleCommand> tasks = new ArrayList<>();
     for (long id : requestIds) {
       tasks.addAll(getTasks(id));
     }
@@ -766,7 +788,7 @@ public class TopologyManager {
 
   public Collection<RequestStatusResponse> getRequestStatus(Collection<Long> ids) {
     ensureInitialized();
-    List<RequestStatusResponse> requestStatusResponses = new ArrayList<RequestStatusResponse>();
+    List<RequestStatusResponse> requestStatusResponses = new ArrayList<>();
     for (long id : ids) {
       RequestStatusResponse response = getRequestStatus(id);
       if (response != null) {
@@ -792,7 +814,7 @@ public class TopologyManager {
    */
   public Map<String, Collection<String>> getPendingHostComponents() {
     ensureInitialized();
-    Map<String, Collection<String>> hostComponentMap = new HashMap<String, Collection<String>>();
+    Map<String, Collection<String>> hostComponentMap = new HashMap<>();
 
     for (LogicalRequest logicalRequest : allRequests.values()) {
       Map<Long, HostRoleCommandStatusSummaryDTO> summary = logicalRequest.getStageSummaries();
@@ -812,7 +834,7 @@ public class TopologyManager {
           String host = entry.getKey();
           Collection<String> hostComponents = hostComponentMap.get(host);
           if (hostComponents == null) {
-            hostComponents = new HashSet<String>();
+            hostComponents = new HashSet<>();
             hostComponentMap.put(host, hostComponents);
           }
           hostComponents.addAll(entry.getValue());
@@ -944,16 +966,8 @@ public class TopologyManager {
     }
 
     LOG.info("TopologyManager.processAcceptedHostOffer: queue tasks for host = {} which responded {}", hostName, response.getAnswer());
-    if (parallelTaskCreationEnabled) {
-      executor.execute(new Runnable() { // do not start until cluster config done
-        @Override
-        public void run() {
-          queueHostTasks(topology, response, hostName);
-        }
-      });
-    } else {
-      queueHostTasks(topology, response, hostName);
-    }
+    queueHostTasks(topology, response, hostName);
+
   }
 
   @Transactional
@@ -962,9 +976,23 @@ public class TopologyManager {
     persistedState.registerInTopologyHostInfo(host);
   }
 
+  private ManagedThreadPoolExecutor getOrCreateTopologyTaskExecutor(Long clusterId) {
+    ManagedThreadPoolExecutor topologyTaskExecutor = this.topologyTaskExecutorServiceMap.get(clusterId);
+    if (topologyTaskExecutor == null) {
+      LOG.info("Creating TopologyTaskExecutorService for clusterId: {}", clusterId);
+
+      topologyTaskExecutor = new ManagedThreadPoolExecutor(topologyTaskExecutorThreadPoolSize,
+              topologyTaskExecutorThreadPoolSize, 0L, TimeUnit.MILLISECONDS,
+              new LinkedBlockingQueue<Runnable>());
+      topologyTaskExecutorServiceMap.put(clusterId, topologyTaskExecutor);
+    }
+    return topologyTaskExecutor;
+  }
+
   private void queueHostTasks(ClusterTopology topology, HostOfferResponse response, String hostName) {
     LOG.info("TopologyManager.processAcceptedHostOffer: queueing tasks for host = {}", hostName);
-    response.executeTasks(taskExecutor, hostName, topology, ambariContext);
+    ExecutorService executorService = getOrCreateTopologyTaskExecutor(topology.getClusterId());
+    response.executeTasks(executorService, hostName, topology, ambariContext);
   }
 
   private void updateHostWithRackInfo(ClusterTopology topology, HostOfferResponse response, HostImpl host) {
@@ -1025,9 +1053,17 @@ public class TopologyManager {
       if (!configChecked) {
         configChecked = true;
         if (!ambariContext.isTopologyResolved(topology.getClusterId())) {
-          LOG.info("TopologyManager.replayRequests: no config with TOPOLOGY_RESOLVED found, adding cluster config request");
-          addClusterConfigRequest(topology, new ClusterConfigurationRequest(
-            ambariContext, topology, false, stackAdvisorBlueprintProcessor));
+          if (provisionRequest == null) {
+            LOG.info("TopologyManager.replayRequests: no config with TOPOLOGY_RESOLVED found, but provision request missing, skipping cluster config request");
+          } else if (provisionRequest.isFinished()) {
+            LOG.info("TopologyManager.replayRequests: no config with TOPOLOGY_RESOLVED found, but provision request is finished, skipping cluster config request");
+          } else {
+            LOG.info("TopologyManager.replayRequests: no config with TOPOLOGY_RESOLVED found, adding cluster config request");
+            ClusterConfigurationRequest configRequest = new ClusterConfigurationRequest(ambariContext, topology, false, stackAdvisorBlueprintProcessor);
+            addClusterConfigRequest(provisionRequest, topology, configRequest);
+          }
+        } else {
+          getOrCreateTopologyTaskExecutor(topology.getClusterId()).start();
         }
       }
     }
@@ -1035,36 +1071,17 @@ public class TopologyManager {
   }
 
   /**
-   * @param logicalRequest
    * @return true if all the tasks in the logical request are in completed state, false otherwise
    */
   private boolean isLogicalRequestFinished(LogicalRequest logicalRequest) {
-    if(logicalRequest != null) {
-      boolean completed = true;
-      for(ShortTaskStatus ts : logicalRequest.getRequestStatus().getTasks()) {
-        if(!HostRoleStatus.valueOf(ts.getStatus()).isCompletedState()) {
-          completed = false;
-        }
-      }
-      return completed;
-    }
-    return false;
+    return logicalRequest != null && logicalRequest.isFinished();
   }
 
   /**
    * Returns if all the tasks in the logical request have completed state.
-   * @param logicalRequest
-   * @return
    */
   private boolean isLogicalRequestSuccessful(LogicalRequest logicalRequest) {
-    if(logicalRequest != null) {
-      for(ShortTaskStatus ts : logicalRequest.getRequestStatus().getTasks()) {
-        if(HostRoleStatus.valueOf(ts.getStatus()) != HostRoleStatus.COMPLETED) {
-          return false;
-        }
-      }
-    }
-    return true;
+    return logicalRequest != null && logicalRequest.isSuccessful();
   }
 
   //todo: this should invoke a callback on each 'service' in the topology
@@ -1095,28 +1112,20 @@ public class TopologyManager {
    * @param topology              cluster topology
    * @param configurationRequest  configuration request to be executed
    */
-  private void addClusterConfigRequest(ClusterTopology topology, ClusterConfigurationRequest configurationRequest) {
-
-    String timeoutStr = topology.getConfiguration().getPropertyValue(CLUSTER_ENV_CONFIG_TYPE_NAME,
-        CLUSTER_CONFIG_TASK_MAX_TIME_IN_MILLIS_PROPERTY_NAME);
-
-    long timeout = 1000 * 60 * 30; // 30 minutes
-    long delay = 1000; //ms
-
-    if (timeoutStr != null) {
-      timeout = Long.parseLong(timeoutStr);
-      LOG.debug("ConfigureClusterTask timeout set to: {}", timeout);
-    } else {
-      LOG.debug("No timeout constraints found in configuration. Wired defaults will be applied.");
-    }
-
-    ConfigureClusterTask configureClusterTask = configureClusterTaskFactory.createConfigureClusterTask(topology,
-      configurationRequest);
-
-    AsyncCallableService<Boolean> asyncCallableService = new AsyncCallableService<>(configureClusterTask, timeout, delay,
-        Executors.newScheduledThreadPool(1));
-
-    executor.submit(asyncCallableService);
+  private void addClusterConfigRequest(final LogicalRequest logicalRequest, ClusterTopology topology, ClusterConfigurationRequest configurationRequest) {
+    ConfigureClusterTask task = configureClusterTaskFactory.createConfigureClusterTask(topology, configurationRequest, ambariEventPublisher);
+    Function<Throwable, Void> onConfigureClusterError = new Function<Throwable, Void>() {
+      @Nullable @Override
+      public Void apply(Throwable input) {
+        HostRoleStatus status = input instanceof TimeoutException ? HostRoleStatus.TIMEDOUT : HostRoleStatus.FAILED;
+        LOG.info("ConfigureClusterTask failed, marking host requests {}", status);
+        for (HostRequest hostRequest : logicalRequest.getHostRequests()) {
+          hostRequest.markHostRequestFailed(status, input, persistedState);
+        }
+        return null;
+      }
+    };
+    executor.submit(new AsyncCallableService<>(task, task.getTimeout(), task.getRepeatDelay(),"ConfigureClusterTask", onConfigureClusterError));
   }
 
   /**

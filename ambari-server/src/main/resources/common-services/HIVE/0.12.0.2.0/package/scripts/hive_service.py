@@ -64,7 +64,7 @@ def hive_service(name, action='start', upgrade_type=None):
     cmd = format("{start_hiveserver2_path} {hive_log_dir}/hive-server2.out {hive_log_dir}/hive-server2.err {pid_file} {hive_server_conf_dir} {hive_log_dir}")
 
 
-    if params.security_enabled and params.current_version and check_stack_feature(StackFeature.HIVE_SERVER2_KERBERIZED_ENV, params.current_version):
+    if params.security_enabled and check_stack_feature(StackFeature.HIVE_SERVER2_KERBERIZED_ENV, params.version_for_stack_feature_checks):
       hive_kinit_cmd = format("{kinit_path_local} -kt {hive_server2_keytab} {hive_principal}; ")
       Execute(hive_kinit_cmd, user=params.hive_user)
 
@@ -76,8 +76,6 @@ def hive_service(name, action='start', upgrade_type=None):
       check_fs_root(params.hive_server_conf_dir, params.execute_path)
 
     daemon_cmd = cmd
-    hadoop_home = params.hadoop_home
-    hive_bin = "hive"
 
     # upgrading hiveserver2 (rolling_restart) means that there is an existing,
     # de-registering hiveserver2; the pid will still exist, but the new
@@ -85,13 +83,9 @@ def hive_service(name, action='start', upgrade_type=None):
     if upgrade_type == UPGRADE_TYPE_ROLLING:
       process_id_exists_command = None
 
-      if params.version and params.stack_root:
-        hadoop_home = format("{stack_root}/{version}/hadoop")
-        hive_bin = os.path.join(params.hive_bin, hive_bin)
-      
-    Execute(daemon_cmd, 
+    Execute(daemon_cmd,
       user = params.hive_user,
-      environment = { 'HADOOP_HOME': hadoop_home, 'JAVA_HOME': params.java64_home, 'HIVE_BIN': hive_bin },
+      environment = { 'JAVA_HOME': params.java64_home, 'HIVE_CMD': params.hive_cmd },
       path = params.execute_path,
       not_if = process_id_exists_command)
 
@@ -167,6 +161,10 @@ def validate_connection(target_path_to_jdbc, hive_lib_path):
 
 def check_fs_root(conf_dir, execution_path):
   import params
+
+  if not params.manage_hive_fsroot:
+    Logger.info("Skipping fs root check as cluster-env/manage_hive_fsroot is disabled")
+    return
 
   if not params.fs_root.startswith("hdfs://"):
     Logger.info("Skipping fs root check as fs_root does not start with hdfs://")

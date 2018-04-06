@@ -24,6 +24,7 @@
     <check>org.apache.ambari.server.checks.RangerAuditDbCheck</check>
     <check>org.apache.ambari.server.checks.ServicePresenceCheck</check>
     <check>org.apache.ambari.server.checks.RangerSSLConfigCheck</check>
+    <check>org.apache.ambari.server.checks.LZOCheck</check>
 
     <configuration>
       <!-- Configuration properties for all pre-reqs including required pre-reqs -->
@@ -132,6 +133,15 @@
       <service name="MAPREDUCE2">
         <component>HISTORYSERVER</component>
       </service>
+      
+      <service name="RANGER">
+        <component>RANGER_USERSYNC</component>
+        <component>RANGER_ADMIN</component>
+      </service>
+
+      <service name="RANGER_KMS">
+        <component>RANGER_KMS_SERVER</component>
+      </service>
     </group>
 
     <group xsi:type="cluster" name="Backups" title="Perform Backups">
@@ -206,15 +216,6 @@
         <component>NFS_GATEWAY</component>
       </service>
 
-      <service name="RANGER">
-        <component>RANGER_USERSYNC</component>
-        <component>RANGER_ADMIN</component>
-      </service>
-
-      <service name="RANGER_KMS">
-        <component>RANGER_KMS_SERVER</component>
-      </service>
-
       <service name="ZOOKEEPER">
         <component>ZOOKEEPER_SERVER</component>
       </service>
@@ -254,9 +255,9 @@
     </group>
 
     <!-- After processing this group, will change the effective Stack of the UpgradeContext object. -->
-    <group xsi:type="update-stack" name="UPDATE_DESIRED_STACK_ID" title="Update Target Stack">
-      <execute-stage title="Update Target Stack">
-        <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.UpdateDesiredStackAction">
+    <group xsi:type="update-stack" name="UPDATE_DESIRED_REPOSITORY_ID" title="Update Target Repositories">
+      <execute-stage title="Update Target Repositories">
+        <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.UpdateDesiredRepositoryAction">
         </task>
       </execute-stage>
     </group>
@@ -594,6 +595,9 @@
         <task xsi:type="configure" id="storm_worker_log4j_directory">
           <summary>Update Storm log directory in storm worker log4j</summary>
         </task>
+      </execute-stage>
+      <execute-stage service="STORM" component="NIMBUS" title="Removing jmxetric from childopts">
+        <task xsi:type="configure" id="storm_remove_jmxetric"/>
       </execute-stage>
 
       <!-- KAFKA -->

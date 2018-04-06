@@ -46,7 +46,6 @@ import java.util.TreeMap;
 import javax.persistence.EntityManager;
 import javax.xml.bind.JAXBException;
 
-import org.apache.ambari.server.AmbariException;
 import org.apache.ambari.server.actionmanager.ExecutionCommandWrapper;
 import org.apache.ambari.server.actionmanager.ExecutionCommandWrapperFactory;
 import org.apache.ambari.server.actionmanager.HostRoleCommandFactory;
@@ -57,12 +56,14 @@ import org.apache.ambari.server.actionmanager.StageFactoryImpl;
 import org.apache.ambari.server.agent.ExecutionCommand;
 import org.apache.ambari.server.api.services.AmbariMetaInfo;
 import org.apache.ambari.server.configuration.Configuration;
+import org.apache.ambari.server.controller.AmbariManagementController;
 import org.apache.ambari.server.orm.DBAccessor;
 import org.apache.ambari.server.orm.dao.HostDAO;
 import org.apache.ambari.server.orm.dao.HostRoleCommandDAO;
 import org.apache.ambari.server.security.SecurityHelper;
 import org.apache.ambari.server.security.encryption.CredentialStoreService;
 import org.apache.ambari.server.stack.StackManagerFactory;
+import org.apache.ambari.server.stageplanner.RoleGraphFactory;
 import org.apache.ambari.server.state.Cluster;
 import org.apache.ambari.server.state.Clusters;
 import org.apache.ambari.server.state.Config;
@@ -74,7 +75,7 @@ import org.apache.ambari.server.state.Service;
 import org.apache.ambari.server.state.ServiceComponent;
 import org.apache.ambari.server.state.ServiceComponentHost;
 import org.apache.ambari.server.state.ServiceComponentHostFactory;
-import org.apache.ambari.server.state.StackId;
+import org.apache.ambari.server.state.UpgradeContextFactory;
 import org.apache.ambari.server.state.cluster.ClusterFactory;
 import org.apache.ambari.server.state.host.HostFactory;
 import org.apache.ambari.server.state.stack.OsFamily;
@@ -128,39 +129,19 @@ public class StageUtilsTest extends EasyMockSupport {
         bind(HostDAO.class).toInstance(createNiceMock(HostDAO.class));
         bind(PersistedState.class).toInstance(createNiceMock(PersistedState.class));
         bind(HostRoleCommandDAO.class).toInstance(createNiceMock(HostRoleCommandDAO.class));
+        bind(AmbariManagementController.class).toInstance(createNiceMock(AmbariManagementController.class));
 
         install(new FactoryModuleBuilder().build(ExecutionCommandWrapperFactory.class));
         install(new FactoryModuleBuilder().implement(Config.class, ConfigImpl.class).build(ConfigFactory.class));
         install(new FactoryModuleBuilder().build(ConfigureClusterTaskFactory.class));
+        install(new FactoryModuleBuilder().build(UpgradeContextFactory.class));
+        install(new FactoryModuleBuilder().build(RoleGraphFactory.class));
       }
     });
 
 
     StageUtils.setTopologyManager(injector.getInstance(TopologyManager.class));
     StageUtils.setConfiguration(injector.getInstance(Configuration.class));
-  }
-
-
-  public static void addService(Cluster cl, List<String> hostList,
-                                Map<String, List<Integer>> topology, String serviceName,
-                                Injector injector) throws AmbariException {
-    ServiceComponentHostFactory serviceComponentHostFactory = injector.getInstance(ServiceComponentHostFactory.class);
-
-    cl.setDesiredStackVersion(new StackId(STACK_ID));
-    cl.addService(serviceName);
-
-    for (Entry<String, List<Integer>> component : topology.entrySet()) {
-      String componentName = component.getKey();
-      cl.getService(serviceName).addServiceComponent(componentName);
-
-      for (Integer hostIndex : component.getValue()) {
-        cl.getService(serviceName)
-            .getServiceComponent(componentName)
-            .addServiceComponentHost(
-                serviceComponentHostFactory.createNew(cl.getService(serviceName)
-                    .getServiceComponent(componentName), hostList.get(hostIndex)));
-      }
-    }
   }
 
   @Test
@@ -195,8 +176,8 @@ public class StageUtilsTest extends EasyMockSupport {
     StageUtils stageUtils = new StageUtils(injector.getInstance(StageFactory.class));
     Stage s = StageUtils.getATestStage(1, 2, "host1", "clusterHostInfo", "hostParamsStage");
     ExecutionCommand cmd = s.getExecutionCommands("host1").get(0).getExecutionCommand();
-    HashMap<String, Map<String, String>> configTags = new HashMap<String, Map<String, String>>();
-    Map<String, String> globalTag = new HashMap<String, String>();
+    HashMap<String, Map<String, String>> configTags = new HashMap<>();
+    Map<String, String> globalTag = new HashMap<>();
     globalTag.put("tag", "version1");
     configTags.put("global", globalTag);
     cmd.setConfigurationTags(configTags);
@@ -221,8 +202,8 @@ public class StageUtilsTest extends EasyMockSupport {
 
     final Clusters clusters = createNiceMock(Clusters.class);
 
-    List<Host> hosts = new ArrayList<Host>();
-    List<String> hostNames = new ArrayList<String>();
+    List<Host> hosts = new ArrayList<>();
+    List<String> hostNames = new ArrayList<>();
 
     List<Integer> pingPorts = Arrays.asList(StageUtils.DEFAULT_PING_PORT,
         StageUtils.DEFAULT_PING_PORT,
@@ -324,7 +305,7 @@ public class StageUtilsTest extends EasyMockSupport {
     final ServiceComponentHost nns7ServiceComponentHost = createMock(ServiceComponentHost.class);
     expect(nns7ServiceComponentHost.getComponentAdminState()).andReturn(HostComponentAdminState.INSERVICE).anyTimes();
 
-    Map<String, Collection<String>> projectedTopology = new HashMap<String, Collection<String>>();
+    Map<String, Collection<String>> projectedTopology = new HashMap<>();
 
 
     final HashMap<String, ServiceComponentHost> nnServiceComponentHosts = new HashMap<String, ServiceComponentHost>() {
@@ -582,16 +563,16 @@ public class StageUtilsTest extends EasyMockSupport {
 
     Set<String> actualPingPorts = info.get(StageUtils.PORTS);
     if (pingPorts.contains(null)) {
-      assertEquals(new HashSet<Integer>(pingPorts).size(), actualPingPorts.size() + 1);
+      assertEquals(new HashSet<>(pingPorts).size(), actualPingPorts.size() + 1);
     } else {
-      assertEquals(new HashSet<Integer>(pingPorts).size(), actualPingPorts.size());
+      assertEquals(new HashSet<>(pingPorts).size(), actualPingPorts.size());
     }
 
     List<Integer> pingPortsActual = getRangeMappedDecompressedSet(actualPingPorts);
-    List<Integer> reindexedPorts = getReindexedList(pingPortsActual, new ArrayList<String>(allHosts), hostNames);
+    List<Integer> reindexedPorts = getReindexedList(pingPortsActual, new ArrayList<>(allHosts), hostNames);
 
     //Treat null values
-    List<Integer> expectedPingPorts = new ArrayList<Integer>(pingPorts);
+    List<Integer> expectedPingPorts = new ArrayList<>(pingPorts);
     for (int i = 0; i < expectedPingPorts.size(); i++) {
       if (expectedPingPorts.get(i) == null) {
         expectedPingPorts.set(i, StageUtils.DEFAULT_PING_PORT);
@@ -631,7 +612,7 @@ public class StageUtilsTest extends EasyMockSupport {
         Collection<String> components = projectedTopology.get(hostname);
 
         if (components == null) {
-          components = new HashSet<String>();
+          components = new HashSet<>();
           projectedTopology.put(hostname, components);
         }
 
@@ -642,8 +623,8 @@ public class StageUtilsTest extends EasyMockSupport {
 
   private void checkServiceHostIndexes(Map<String, Set<String>> info, String componentName, String mappedComponentName,
                                        Map<String, Collection<String>> serviceTopology, List<String> hostList) {
-    Set<Integer> expectedHostsList = new HashSet<Integer>();
-    Set<Integer> actualHostsList = new HashSet<Integer>();
+    Set<Integer> expectedHostsList = new HashSet<>();
+    Set<Integer> actualHostsList = new HashSet<>();
 
     // Determine the expected hosts for a given component...
     for (Entry<String, Collection<String>> entry : serviceTopology.entrySet()) {
@@ -663,8 +644,8 @@ public class StageUtilsTest extends EasyMockSupport {
 
   private void checkServiceHostNames(Map<String, Set<String>> info, String componentName, String mappedComponentName,
                                      Map<String, Collection<String>> serviceTopology) {
-    Set<String> expectedHostsList = new HashSet<String>();
-    Set<String> actualHostsList = new HashSet<String>();
+    Set<String> expectedHostsList = new HashSet<>();
+    Set<String> actualHostsList = new HashSet<>();
 
     // Determine the expected hosts for a given component...
     for (Entry<String, Collection<String>> entry : serviceTopology.entrySet()) {
@@ -684,7 +665,7 @@ public class StageUtilsTest extends EasyMockSupport {
 
   private Set<Integer> getDecompressedSet(Set<String> set) {
 
-    Set<Integer> resultSet = new HashSet<Integer>();
+    Set<Integer> resultSet = new HashSet<>();
 
     for (String index : set) {
       String[] ranges = index.split(",");
@@ -712,7 +693,7 @@ public class StageUtilsTest extends EasyMockSupport {
 
   private List<Integer> getRangeMappedDecompressedSet(Set<String> compressedSet) {
 
-    SortedMap<Integer, Integer> resultMap = new TreeMap<Integer, Integer>();
+    SortedMap<Integer, Integer> resultMap = new TreeMap<>();
 
     for (String token : compressedSet) {
 
@@ -728,7 +709,7 @@ public class StageUtilsTest extends EasyMockSupport {
       String rangeTokens = split[1];
 
       Set<String> rangeTokensSet =
-          new HashSet<String>(Arrays.asList(rangeTokens.split(",")));
+          new HashSet<>(Arrays.asList(rangeTokens.split(",")));
 
       Set<Integer> decompressedSet = getDecompressedSet(rangeTokensSet);
 
@@ -738,7 +719,7 @@ public class StageUtilsTest extends EasyMockSupport {
 
     }
 
-    List<Integer> resultList = new ArrayList<Integer>(resultMap.values());
+    List<Integer> resultList = new ArrayList<>(resultMap.values());
 
     return resultList;
 
@@ -747,7 +728,7 @@ public class StageUtilsTest extends EasyMockSupport {
   private List<Integer> getReindexedList(List<Integer> list,
                                          List<String> currentIndexes, List<String> desiredIndexes) {
 
-    SortedMap<Integer, Integer> sortedMap = new TreeMap<Integer, Integer>();
+    SortedMap<Integer, Integer> sortedMap = new TreeMap<>();
 
     int index = 0;
 
@@ -758,7 +739,7 @@ public class StageUtilsTest extends EasyMockSupport {
       index++;
     }
 
-    return new ArrayList<Integer>(sortedMap.values());
+    return new ArrayList<>(sortedMap.values());
   }
 
   private String getHostName() {

@@ -167,6 +167,14 @@ App.ServiceConfigProperty = Em.Object.extend({
    */
   isCustomGroupConfig: false,
 
+  /**
+   * Determines if config is Undefined label, used for overrides, that do not have original property in default group
+   * @type {boolean}
+   */
+  isUndefinedLabel: function () {
+    return this.get('displayType') === 'label' && this.get('value') === 'Undefined';
+  }.property('displayType', 'value'),
+
   error: Em.computed.bool('errorMessage.length'),
   warn: Em.computed.bool('warnMessage.length'),
   hasValidationErrors: Em.computed.bool('validationErrors.length'),
@@ -360,9 +368,7 @@ App.ServiceConfigProperty = Em.Object.extend({
   cantBeUndone: Em.computed.existsIn('displayType', ["componentHost", "componentHosts", "radio button"]),
 
   validate: function () {
-    if (!this.get('isEditable')) {
-      this.set('errorMessage', ''); // do not perform validation for not editable configs
-    } else if ((typeof this.get('value') != 'object') && ((this.get('value') + '').length === 0)) {
+    if ((typeof this.get('value') != 'object') && ((this.get('value') + '').length === 0)) {
       var widgetType = this.get('widgetType');
       this.set('errorMessage', (this.get('isRequired') && (!['test-db-connection','label'].contains(widgetType))) ? Em.I18n.t('errorMessage.config.required') : '');
     } else {

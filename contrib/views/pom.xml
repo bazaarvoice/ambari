@@ -29,7 +29,7 @@
   <version>2.6.1.0-100</version>
   <name>Ambari Contrib Views</name>
   <properties>
-    <ambari.version>2.5.2.0.0</ambari.version>
+    <ambari.version>2.6.1.0-100</ambari.version>
     <ambari.dir>${project.parent.parent.basedir}</ambari.dir>
     <hadoop.version>2.7.3</hadoop.version>
     <views.jars.dir>views-jars</views.jars.dir>
@@ -41,7 +41,7 @@
     <module>files</module>
     <module>jobs</module>
     <module>pig</module>
-    <module>slider</module>
+    <!--module>slider</module-->
     <module>capacity-scheduler</module>
     <module>tez</module>
     <module>hawq</module>
@@ -177,6 +177,11 @@
   </profiles>
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>commons-collections</groupId>
+        <artifactId>commons-collections</artifactId>
+        <version>3.2.2</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.httpcomponents</groupId>
         <artifactId>httpclient</artifactId>

@@ -34,6 +34,8 @@ from resource_management.libraries.functions.copy_tarball import STACK_VERSION_P
 from resource_management.libraries.functions import get_kinit_path
 from resource_management.libraries.script.script import Script
 from resource_management.libraries.functions import stack_select
+from resource_management.libraries.functions import upgrade_summary
+from resource_management.libraries.functions.stack_features import get_stack_feature_version
 from resource_management.libraries.functions.get_port_from_url import get_port_from_url
 from resource_management.libraries import functions
 
@@ -56,21 +58,19 @@ stack_is_21 = False
 # It cannot be used during the initial Cluser Install because the version is not yet known.
 version = default("/commandParams/version", None)
 
-# current host stack version
-current_version = default("/hostLevelParams/current_version", None)
-
 # Upgrade direction
 upgrade_direction = default("/commandParams/upgrade_direction", None)
 
-# When downgrading the 'version' and 'current_version' are both pointing to the downgrade-target version
+# When downgrading the 'version' is pointing to the downgrade-target version
 # downgrade_from_version provides the source-version the downgrade is happening from
-downgrade_from_version = default("/commandParams/downgrade_from_version", None)
+downgrade_from_version = upgrade_summary.get_downgrade_from_version("HIVE")
+
+# get the correct version to use for checking stack features
+version_for_stack_feature_checks = get_stack_feature_version(config)
 
 component_directory = status_params.component_directory
 hadoop_bin_dir = "/usr/bin"
 hadoop_home = '/usr'
-hive_bin = '/usr/lib/hive/bin'
-hive_lib = '/usr/lib/hive/lib'
 
 #Hbase params keep hbase lib here,if not,mapreduce job doesn't work for hive.
 hbase_lib = '/usr/iop/current/hbase-client/lib'
@@ -93,6 +93,7 @@ if command_role in server_role_dir_mapping:
   hive_bin = format('/usr/iop/current/{hive_server_root}/bin')
   hive_lib = format('/usr/iop/current/{hive_server_root}/lib')
 
+hive_cmd = os.path.join(hive_bin, "hive")
 hive_specific_configs_supported = False
 hive_etc_dir_prefix = "/etc/hive"
 limits_conf_dir = "/etc/security/limits.d"
@@ -115,8 +116,6 @@ hcat_lib = '/usr/iop/current/hive-webhcat/share/hcatalog'
 webhcat_bin_dir = '/usr/iop/current/hive-webhcat/sbin'
 component_directory = status_params.component_directory
 hadoop_home = '/usr/iop/current/hadoop-client'
-hive_bin = format('/usr/iop/current/{component_directory}/bin')
-hive_lib = format('/usr/iop/current/{component_directory}/lib')
 
 # there are no client versions of these, use server versions directly
 hcat_lib = '/usr/iop/current/hive-webhcat/share/hcatalog'
@@ -159,6 +158,8 @@ else: #BI 4.0
 execute_path = os.environ['PATH'] + os.pathsep + hive_bin + os.pathsep + hadoop_bin_dir
 hive_metastore_user_name = config['configurations']['hive-site']['javax.jdo.option.ConnectionUserName']
 hive_jdbc_connection_url = config['configurations']['hive-site']['javax.jdo.option.ConnectionURL']
+
+version_for_source_jdbc_file = upgrade_summary.get_source_version(default_version = version_for_stack_feature_checks)
 
 hive_metastore_user_passwd = config['configurations']['hive-site']['javax.jdo.option.ConnectionPassword']
 hive_metastore_db_type = config['configurations']['hive-env']['hive_database_type']

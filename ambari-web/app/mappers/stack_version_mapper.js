@@ -36,13 +36,15 @@ App.stackVersionMapper = App.QuickDataMapper.create({
     "upgrading_hosts": "host_states.UPGRADING",
     "upgraded_hosts": "host_states.UPGRADED",
     "upgrade_failed_hosts": "host_states.UPGRADE_FAILED",
-    "current_hosts": "host_states.CURRENT"
+    "current_hosts": "host_states.CURRENT",
+    "supports_revert": "supports_revert",
+    "revert_upgrade_id": "revert_upgrade_id"
   },
 
   map: function (json) {
     var modelStackVerion = this.get('modelStackVerion');
     var resultStack = [];
-
+    var hasCurrentVersion = false;
     if (json && json.items) {
       json.items.sort(function (a, b) {
         return stringUtils.compareVersions(a.repository_versions[0].RepositoryVersions.repository_version, b.repository_versions[0].RepositoryVersions.repository_version);
@@ -77,7 +79,18 @@ App.stackVersionMapper = App.QuickDataMapper.create({
 
         if (item.repository_versions && item.repository_versions[0]) {
           item.repository_versions[0].RepositoryVersions.stackVersionId = item.ClusterStackVersions.id;
-          App.repoVersionMapper.map({"items": item.repository_versions }, true, true);
+          App.repoVersionMapper.map({
+            "items": item.repository_versions,
+            "stackServices": item.ClusterStackVersions.repository_summary && item.ClusterStackVersions.repository_summary.services
+          }, true, true);
+          if (item.ClusterStackVersions.state === 'CURRENT' || (item.ClusterStackVersions.state === 'OUT_OF_SYNC' && !hasCurrentVersion)) {
+            var version = item.repository_versions[0].RepositoryVersions.repository_version;
+            if (version.indexOf('-') != -1) {
+              version = version.split('-')[0];
+            }
+            hasCurrentVersion = item.ClusterStackVersions.state === 'CURRENT';
+            App.set('fullStackVersion', version);
+          }
         }
         resultStack.push(this.parseIt(stack, this.get('modelStack')));
       }, this);

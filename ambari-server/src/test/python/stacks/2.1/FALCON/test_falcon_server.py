@@ -33,32 +33,33 @@ class TestFalconServer(RMFTestCase):
   UPGRADE_STACK_VERSION = "2.2"
   DEFAULT_IMMUTABLE_PATHS = ['/apps/hive/warehouse', '/apps/falcon', '/mr-history/done', '/app-logs', '/tmp']
 
+  CONFIG_OVERRIDES = {"serviceName":"FALCON", "role":"FALCON_SERVER"}
+
   def test_start_default(self):
     self.executeScript(self.COMMON_SERVICES_PACKAGE_DIR + "/scripts/falcon_server.py",
       classname="FalconServer",
       command="start",
       config_file="default.json",
+      config_overrides = self.CONFIG_OVERRIDES,
       stack_version = self.STACK_VERSION,
       target = RMFTestCase.TARGET_COMMON_SERVICES)
 
     self.assert_configure_default()
 
-    self.assertResourceCalled('Execute', '/usr/lib/falcon/bin/falcon-config.sh server falcon',
+    self.assertResourceCalled('Execute', '/usr/hdp/current/falcon-server/bin/falcon-config.sh server falcon',
       path = ['/usr/bin'],
       user = 'falcon',
-      environment = {'HADOOP_HOME': '/usr/lib/hadoop'},
       not_if = 'ls /var/run/falcon/falcon.pid && ps -p ',
     )
 
-    self.assertResourceCalled('File', '/usr/lib/falcon/server/webapp/falcon/WEB-INF/lib/je-5.0.73.jar',
+    self.assertResourceCalled('File', '/usr/hdp/current/falcon-server/server/webapp/falcon/WEB-INF/lib/je-5.0.73.jar',
       content=DownloadSource('http://c6401.ambari.apache.org:8080/resources//je-5.0.73.jar'),
       mode=0755
     )
 
-    self.assertResourceCalled('Execute', '/usr/lib/falcon/bin/falcon-start -port 15000',
+    self.assertResourceCalled('Execute', '/usr/hdp/current/falcon-server/bin/falcon-start -port 15000',
       path = ['/usr/bin'],
       user = 'falcon',
-      environment = {'HADOOP_HOME': '/usr/lib/hadoop'},
       not_if = 'ls /var/run/falcon/falcon.pid && ps -p ',
     )
 
@@ -69,13 +70,13 @@ class TestFalconServer(RMFTestCase):
       classname="FalconServer",
       command="stop",
       config_file="default.json",
+      config_overrides = self.CONFIG_OVERRIDES,
       stack_version = self.STACK_VERSION,
       target = RMFTestCase.TARGET_COMMON_SERVICES)
 
-    self.assertResourceCalled('Execute', '/usr/lib/falcon/bin/falcon-stop',
+    self.assertResourceCalled('Execute', '/usr/hdp/current/falcon-server/bin/falcon-stop',
       path = ['/usr/bin'],
-      user = 'falcon',
-      environment = {'HADOOP_HOME': '/usr/lib/hadoop'})
+      user = 'falcon')
 
     self.assertResourceCalled('File', '/var/run/falcon/falcon.pid',
       action = ['delete'])
@@ -87,6 +88,7 @@ class TestFalconServer(RMFTestCase):
                        classname="FalconServer",
                        command="configure",
                        config_file="default.json",
+                       config_overrides = self.CONFIG_OVERRIDES,
                        stack_version = self.STACK_VERSION,
                        target = RMFTestCase.TARGET_COMMON_SERVICES
     )
@@ -106,11 +108,11 @@ class TestFalconServer(RMFTestCase):
                               cd_access = "a",
                               mode = 0755,
                               )
-    self.assertResourceCalled('Directory', '/var/lib/falcon/webapp',
+    self.assertResourceCalled('Directory', '/usr/hdp/current/falcon-server/webapp',
                               owner = 'falcon',
                               create_parents = True
                               )
-    self.assertResourceCalled('Directory', '/usr/lib/falcon',
+    self.assertResourceCalled('Directory', '/usr/hdp/current/falcon-server',
                               owner = 'falcon',
                               create_parents = True
                               )
@@ -225,28 +227,30 @@ class TestFalconServer(RMFTestCase):
 
     self.executeScript(self.COMMON_SERVICES_PACKAGE_DIR + "/scripts/falcon_server.py",
      classname = "FalconServer", command = "restart", config_file = "falcon-upgrade.json",
+     config_overrides = self.CONFIG_OVERRIDES,
      stack_version = self.UPGRADE_STACK_VERSION,
      target = RMFTestCase.TARGET_COMMON_SERVICES )
 
     self.assertResourceCalled('Execute',
       '/usr/hdp/current/falcon-server/bin/falcon-stop',
-      path = ['/usr/hdp/current/hadoop-client/bin'], user='falcon',
-      environment = {'HADOOP_HOME': '/usr/hdp/current/hadoop-client'})
+      path = ['/usr/hdp/2.2.1.0-2135/hadoop/bin'], user='falcon')
 
     self.assertResourceCalled('File', '/var/run/falcon/falcon.pid',
       action = ['delete'])
 
     self.assertResourceCalled('Execute', ('tar',
-     '-zcvhf',
+     '-zchf',
      '/tmp/falcon-upgrade-backup/falcon-local-backup.tar',
-     u'/hadoop/falcon'),
+     '-C',
+     u'/hadoop/falcon',
+     '.'),
         sudo = True, tries = 3, try_sleep = 1,
     )
     self.assertResourceCalled('Execute', ('ambari-python-wrap', '/usr/bin/hdp-select', 'set', 'falcon-server', u'2.2.1.0-2135'),
         sudo = True,
     )
     self.assertResourceCalled('Execute', ('tar',
-     '-xvf',
+     '-xf',
      '/tmp/falcon-upgrade-backup/falcon-local-backup.tar',
      '-C',
      u'/hadoop/falcon/'),
@@ -336,7 +340,7 @@ class TestFalconServer(RMFTestCase):
     self.assertResourceCalled('HdfsResource', '/apps/falcon',
         immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
         security_enabled = False,
-        hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+        hadoop_bin_dir = '/usr/hdp/2.2.1.0-2135/hadoop/bin',
         keytab = UnknownConfigurationMock(),
         default_fs = 'hdfs://c6401.ambari.apache.org:8020',
         hdfs_site = self.getConfig()['configurations']['hdfs-site'],
@@ -345,7 +349,7 @@ class TestFalconServer(RMFTestCase):
         user = 'hdfs',
         dfs_type = '',
         owner = 'falcon',
-        hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+        hadoop_conf_dir = '/etc/hadoop/conf',
         type = 'directory',
         action = ['create_on_execute'], hdfs_resource_ignore_file='/var/lib/ambari-agent/data/.hdfs_resource_ignore',
         mode = 0777,
@@ -353,7 +357,7 @@ class TestFalconServer(RMFTestCase):
     self.assertResourceCalled('HdfsResource', '/apps/data-mirroring',
         immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
         security_enabled = False,
-        hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+        hadoop_bin_dir = '/usr/hdp/2.2.1.0-2135/hadoop/bin',
         keytab = UnknownConfigurationMock(),
         source = '/usr/hdp/current/falcon-server/data-mirroring',
         default_fs = 'hdfs://c6401.ambari.apache.org:8020',
@@ -366,7 +370,7 @@ class TestFalconServer(RMFTestCase):
         recursive_chown = True,
         owner = 'falcon',
         group = 'users',
-        hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+        hadoop_conf_dir = '/etc/hadoop/conf',
         type = 'directory',
         action = ['create_on_execute'], hdfs_resource_ignore_file='/var/lib/ambari-agent/data/.hdfs_resource_ignore',
         mode = 0770,
@@ -374,7 +378,7 @@ class TestFalconServer(RMFTestCase):
     self.assertResourceCalled('HdfsResource', None,
         immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
         security_enabled = False,
-        hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+        hadoop_bin_dir = '/usr/hdp/2.2.1.0-2135/hadoop/bin',
         keytab = UnknownConfigurationMock(),
         default_fs = 'hdfs://c6401.ambari.apache.org:8020',
         hdfs_site = self.getConfig()['configurations']['hdfs-site'],
@@ -383,7 +387,7 @@ class TestFalconServer(RMFTestCase):
         user = 'hdfs',
         dfs_type = '',
         action = ['execute'], hdfs_resource_ignore_file='/var/lib/ambari-agent/data/.hdfs_resource_ignore',
-        hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+        hadoop_conf_dir = '/etc/hadoop/conf',
     )
     self.assertResourceCalled('Directory', '/hadoop/falcon',
         owner = 'falcon',
@@ -398,17 +402,15 @@ class TestFalconServer(RMFTestCase):
         owner = 'falcon',
         create_parents = True,
     )
-   
+
     self.assertResourceCalled('Execute', '/usr/hdp/current/falcon-server/bin/falcon-config.sh server falcon',
-        environment = {'HADOOP_HOME': '/usr/hdp/current/hadoop-client'},
-        path = ['/usr/hdp/current/hadoop-client/bin'],
+        path = ['/usr/hdp/2.2.1.0-2135/hadoop/bin'],
         user = 'falcon',
         not_if = 'ls /var/run/falcon/falcon.pid && ps -p ',
     )
 
     self.assertResourceCalled('Execute', '/usr/hdp/current/falcon-server/bin/falcon-start -port 15000',
-        environment = {'HADOOP_HOME': '/usr/hdp/current/hadoop-client'},
-        path = ['/usr/hdp/current/hadoop-client/bin'],
+        path = ['/usr/hdp/2.2.1.0-2135/hadoop/bin'],
         user = 'falcon',
         not_if = 'ls /var/run/falcon/falcon.pid && ps -p ',
     )
@@ -427,12 +429,13 @@ class TestFalconServer(RMFTestCase):
                        classname = "FalconServer",
                        command = "pre_upgrade_restart",
                        config_dict = json_content,
+                       config_overrides = self.CONFIG_OVERRIDES,
                        stack_version = self.STACK_VERSION,
                        target = RMFTestCase.TARGET_COMMON_SERVICES)
     self.assertResourceCalled('Execute',
                               ('ambari-python-wrap', '/usr/bin/hdp-select', 'set', 'falcon-server', version), sudo=True,)
     self.assertResourceCalled('Execute', ('tar',
-                                          '-xvf',
+                                          '-xf',
                                           '/tmp/falcon-upgrade-backup/falcon-local-backup.tar',
                                           '-C',
                                           u'/hadoop/falcon/'),
@@ -463,16 +466,16 @@ class TestFalconServer(RMFTestCase):
                        classname = "FalconServer",
                        command = "pre_upgrade_restart",
                        config_dict = json_content,
+                       config_overrides = self.CONFIG_OVERRIDES,
                        stack_version = self.STACK_VERSION,
                        target = RMFTestCase.TARGET_COMMON_SERVICES,
-                       call_mocks = [(0, None, ''), (0, None)],
                        mocks_dict = mocks_dict)
 
     self.assertResourceCalledIgnoreEarlier('Execute',
                               ('ambari-python-wrap', '/usr/bin/hdp-select', 'set', 'falcon-server', version), sudo=True,)
 
     self.assertResourceCalled('Execute', ('tar',
-     '-xvf',
+     '-xf',
      '/tmp/falcon-upgrade-backup/falcon-local-backup.tar',
      '-C',
      u'/hadoop/falcon/'),
@@ -482,12 +485,3 @@ class TestFalconServer(RMFTestCase):
         action = ['delete'],
     )
     self.assertNoMoreResources()
-
-    self.assertEquals(1, mocks_dict['call'].call_count)
-    self.assertEquals(1, mocks_dict['checked_call'].call_count)
-    self.assertEquals(
-      ('ambari-python-wrap', '/usr/bin/conf-select', 'set-conf-dir', '--package', 'falcon', '--stack-version', '2.3.0.0-1234', '--conf-version', '0'),
-       mocks_dict['checked_call'].call_args_list[0][0][0])
-    self.assertEquals(
-      ('ambari-python-wrap', '/usr/bin/conf-select', 'create-conf-dir', '--package', 'falcon', '--stack-version', '2.3.0.0-1234', '--conf-version', '0'),
-       mocks_dict['call'].call_args_list[0][0][0])

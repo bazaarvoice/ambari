@@ -22,46 +22,90 @@ var stringUtils = require('utils/string_utils');
 App.UpgradeVersionColumnView = App.UpgradeVersionBoxView.extend({
   templateName: require('templates/main/admin/stack_upgrade/upgrade_version_column'),
   isVersionColumnView: true,
-  classNames: ['version-column', 'span4'],
+  classNames: ['version-column'],
 
   didInsertElement: function () {
     App.tooltip($('.out-of-sync-badge'), {title: Em.I18n.t('hosts.host.stackVersions.status.out_of_sync')});
+    App.tooltip($('.not-upgradable'), {title: Em.I18n.t('admin.stackVersions.version.service.notUpgradable')});
+    App.tooltip($('.icon-bug'), {title: Em.I18n.t('common.patch')});
+    App.tooltip($('.icon-wrench'), {title: Em.I18n.t('common.maint')});
     if (!this.get('content.isCompatible')) {
       App.tooltip(this.$(".repo-version-tooltip"), {
         title: Em.I18n.t('admin.stackVersions.version.noCompatible.tooltip')
       });
     }
-    //set the width, height of each version colum dynamically
-    var widthFactor = App.RepositoryVersion.find().get('length') > 3 ? 0.18: 0.31;
-    $('.version-column').width($('.versions-slides').width() * widthFactor);
-    var height = App.Service.find().get('length') > 10 ? ((App.Service.find().get('length') - 10) * 40 + 500) : 500;
+
+    var height = App.Service.find().get('length') > 9 ? ((App.Service.find().get('length') - 9) * 38 + 500) : 500;
     $('.version-column').height(height);
 
-    // fix the line up minor diff issue in FireFox
-    if ($.browser.mozilla) {
-      $('.line-separator').css('top', '-6px');
-      $('.line-separator-bottom').css('top', '-4px');
+    // fix the line up minor diff issue
+    var serviceNamesOffset = $('.service-display-name').offset().top;
+    var separatorOffset = $('.line-separator').offset().top;
+    this.fixSeparator(serviceNamesOffset - separatorOffset);
+  },
+
+  /**
+   * Move line-separator and line-separator bottom on gap
+   * @param gap
+   */
+  fixSeparator: function (gap) {
+    if (gap !== 1) {
+      var topSeparators = $('.line-separator');
+      var bottomSeparators = $('.line-separator-bottom');
+      var topPosition = parseInt(topSeparators.css('top'), 10);
+      var bottomPosition = parseInt(bottomSeparators.css('top'), 10);
+      topSeparators.css('top', topPosition + gap - 1 + 'px');
+      bottomSeparators.css('top', bottomPosition + gap - 1 +'px');
     }
   },
 
   services: function() {
-    var repoRecord = App.RepositoryVersion.find(this.get('content.id'));
-    var originalServices = repoRecord.get('stackServices');
+    var originalServices = this.get('content.stackServices');
+    var isStandard = this.get('content.isStandard');
     // sort the services in the order the same as service menu
-    var sorted = App.Service.find().map(function (service) {
-      var latestVersion = '';
-      if (originalServices.someProperty('name', service.get('serviceName'))){
-        latestVersion = originalServices.filterProperty('name', service.get('serviceName'))[0].get('latestVersion');
-      }
+    return App.Service.find().map(function (service) {
+
+      var stackService = originalServices.findProperty('name', service.get('serviceName'));
+      var isAvailable = this.isStackServiceAvailable(stackService);
+      var isUpgradable = stackService && stackService.get('isUpgradable');
       return Em.Object.create({
         displayName: service.get('displayName'),
         name: service.get('serviceName'),
-        latestVersion: latestVersion,
-        isVersionInvisible: latestVersion == false
+        latestVersion: stackService ? stackService.get('latestVersion') : '',
+        isVersionInvisible: !stackService,
+        notUpgradable: this.getNotUpgradable(isAvailable, isUpgradable),
+        isAvailable: isAvailable
       });
-    });
-    return sorted;
+    }, this);
   }.property(),
+
+  /**
+   * @param {boolean} isAvailable
+   * @param {boolean} isUpgradable
+   * @returns {boolean}
+   */
+  getNotUpgradable: function(isAvailable, isUpgradable) {
+    return this.get('content.isMaint') && !this.get('isUpgrading') && this.get('content.status') !== 'CURRENT' && isAvailable && !isUpgradable;
+  },
+
+  /**
+   * @param {Em.Object} stackService
+   * @returns {boolean}
+   */
+  isStackServiceAvailable: function(stackService) {
+    if (!stackService) {
+      return false;
+    }
+    if ( this.get('content.isCurrent') ){
+      var originalService = App.Service.find(stackService.get('name'));
+      return stackService.get('isAvailable') && originalService.get('desiredRepositoryVersionId') === this.get('content.id');
+    }
+    else{
+      return stackService.get('isAvailable')
+    }
+
+
+  },
 
   /**
    * on click handler for "show details" link

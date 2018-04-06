@@ -21,6 +21,7 @@ limitations under the License.
 import socket
 
 import status_params
+from ambari_commons.constants import AMBARI_SUDO_BINARY
 from resource_management.libraries.functions.stack_features import check_stack_feature
 from resource_management.libraries.functions import StackFeature
 from setup_spark import *
@@ -48,6 +49,7 @@ SERVER_ROLE_DIRECTORY_MAP = {
 
 }
 
+sudo = AMBARI_SUDO_BINARY
 component_directory = Script.get_component_from_role(SERVER_ROLE_DIRECTORY_MAP, "SPARK2_CLIENT")
 
 config = Script.get_config()
@@ -136,6 +138,7 @@ security_enabled = config['configurations']['cluster-env']['security_enabled']
 kinit_path_local = get_kinit_path(default('/configurations/kerberos-env/executable_search_paths', None))
 spark_kerberos_keytab =  config['configurations']['spark2-defaults']['spark.history.kerberos.keytab']
 spark_kerberos_principal =  config['configurations']['spark2-defaults']['spark.history.kerberos.principal']
+smoke_user = config['configurations']['cluster-env']['smokeuser']
 smoke_user_keytab = config['configurations']['cluster-env']['smokeuser_keytab']
 smokeuser_principal =  config['configurations']['cluster-env']['smokeuser_principal_name']
 

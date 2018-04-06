@@ -230,9 +230,9 @@ App.ServiceConfigTextFieldUserGroupWithID = Ember.View.extend(App.ServiceConfigP
   templateName: require('templates/wizard/controls_service_config_usergroup_with_id'),
 
   isUIDGIDVisible: function () {
-    var overrideUidDisabled = this.get('parentView').serviceConfigs.findProperty('name', 'override_uid').value === 'false';
+    var overrideUid = this.get('parentView').serviceConfigs.findProperty('name', 'override_uid');
     //don't display the ugid field if there is no uid/gid for this property or override_uid is unchecked
-    if (Em.isNone(this.get('serviceConfig.ugid')) || overrideUidDisabled) {
+    if (Em.isNone(this.get('serviceConfig.ugid')) || overrideUid && overrideUid.value === 'false') {
       return false;
     }
 
@@ -519,6 +519,7 @@ App.ServiceConfigRadioButtons = Ember.View.extend(App.ServiceConfigCalculateId, 
     if (['addServiceController', 'installerController'].contains(this.get('controller.wizardController.name')) && !App.StackService.find(this.get('serviceConfig.serviceName')).get('isInstalled')) {
       if (this.get('isNewDb') || this.get('dontUseHandleDbConnection').contains(this.get('serviceConfig.name'))) {
         this.onOptionsChange();
+        this.handleDBConnectionProperty();
       } else {
         if ((App.get('isHadoopWindowsStack') && this.get('inMSSQLWithIA')) || this.get('serviceConfig.name') === 'DB_FLAVOR') {
           this.onOptionsChange();
@@ -728,6 +729,11 @@ App.ServiceConfigRadioButtons = Ember.View.extend(App.ServiceConfigCalculateId, 
       // check for all db types when installing Ranger - not only for existing ones
       checkDatabase = true;
     }
+    // Hive specific
+    if (this.get('serviceConfig.serviceName') === 'HIVE') {
+      // check for all db types when installing Hive - not only for existing ones
+      checkDatabase = true;
+    }
     if (propertyAppendTo1) {
       propertyAppendTo1.set('additionalView', null);
     }
@@ -737,11 +743,14 @@ App.ServiceConfigRadioButtons = Ember.View.extend(App.ServiceConfigCalculateId, 
     var shouldAdditionalViewsBeSet = currentDB && checkDatabase && handledProperties.contains(this.get('serviceConfig.name')),
       driver = this.getDefaultPropertyValue('sql_jar_connector') ? this.getDefaultPropertyValue('sql_jar_connector').split("/").pop() : 'driver.jar',
       dbType = this.getDefaultPropertyValue('db_type'),
-      additionalView1 = shouldAdditionalViewsBeSet ? App.CheckDBConnectionView.extend({databaseName: dbType}) : null,
+      dbName = this.getDefaultPropertyValue('db_name'),
+      driverName = this.getDefaultPropertyValue('driver_name'),
+      driverDownloadUrl = this.getDefaultPropertyValue('driver_download_url'),
+      additionalView1 = shouldAdditionalViewsBeSet && !this.get('isNewDb') ? App.CheckDBConnectionView.extend({databaseName: dbType}) : null,
       additionalView2 = shouldAdditionalViewsBeSet ? Ember.View.extend({
         template: Ember.Handlebars.compile('<div class="alert">{{{view.message}}}</div>'),
         message: function() {
-          return Em.I18n.t('services.service.config.database.msg.jdbcSetup').format(dbType, driver);
+          return Em.I18n.t('services.service.config.database.msg.jdbcSetup.detailed').format(dbName, dbType, driver, driverDownloadUrl, driverName);
         }.property()
       }) : null;
     if (propertyAppendTo1) {

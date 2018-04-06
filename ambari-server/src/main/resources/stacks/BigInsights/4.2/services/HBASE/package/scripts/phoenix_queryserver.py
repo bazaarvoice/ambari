@@ -17,7 +17,6 @@ limitations under the License.
 
 """
 
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from resource_management.libraries.functions.version import compare_versions
 from resource_management.libraries.script import Script
@@ -29,11 +28,6 @@ class PhoenixQueryServer(Script):
   def install(self, env):
     import params
     self.install_packages(env)
-
-
-  def get_component_name(self):
-    return "phoenix-server"
-
 
   def configure(self, env):
     import params
@@ -60,8 +54,7 @@ class PhoenixQueryServer(Script):
 
     if Script.is_stack_greater_or_equal("4.2"):
       # phoenix uses hbase configs
-      conf_select.select(params.stack_name, "hbase", params.version)
-      stack_select.select("phoenix-server", params.version)
+      stack_select.select_packages(params.version)
 
 
   def status(self, env):

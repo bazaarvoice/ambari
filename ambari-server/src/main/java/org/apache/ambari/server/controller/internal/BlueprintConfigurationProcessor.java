@@ -30,6 +30,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -899,14 +900,14 @@ public class BlueprintConfigurationProcessor {
     Map<String, String> yarnSiteConfig = clusterTopology.getConfiguration().getFullProperties().get("yarn-site");
     // generate the property names based on the current HA config for the ResourceManager deployments
     for (String resourceManager : parseResourceManagers(yarnSiteConfig)) {
-      final String rmHostPropertyName = "yarn.resourcemanager.hostname." + resourceManager;
-      yarnSiteUpdatersForAvailability.put(rmHostPropertyName, new SingleHostTopologyUpdater("RESOURCEMANAGER"));
-
-      final String rmHTTPAddress = "yarn.resourcemanager.webapp.address." + resourceManager;
-      yarnSiteUpdatersForAvailability.put(rmHTTPAddress, new SingleHostTopologyUpdater("RESOURCEMANAGER"));
-
-      final String rmHTTPSAddress = "yarn.resourcemanager.webapp.https.address." + resourceManager;
-      yarnSiteUpdatersForAvailability.put(rmHTTPSAddress, new SingleHostTopologyUpdater("RESOURCEMANAGER"));
+      SingleHostTopologyUpdater updater = new SingleHostTopologyUpdater("RESOURCEMANAGER");
+      yarnSiteUpdatersForAvailability.put("yarn.resourcemanager.hostname." + resourceManager, updater);
+      yarnSiteUpdatersForAvailability.put("yarn.resourcemanager.address." + resourceManager, updater);
+      yarnSiteUpdatersForAvailability.put("yarn.resourcemanager.admin.address." + resourceManager, updater);
+      yarnSiteUpdatersForAvailability.put("yarn.resourcemanager.resource-tracker.address." + resourceManager, updater);
+      yarnSiteUpdatersForAvailability.put("yarn.resourcemanager.scheduler.address." + resourceManager, updater);
+      yarnSiteUpdatersForAvailability.put("yarn.resourcemanager.webapp.address." + resourceManager, updater);
+      yarnSiteUpdatersForAvailability.put("yarn.resourcemanager.webapp.https.address." + resourceManager, updater);
     }
 
     return highAvailabilityUpdaters;
@@ -1268,12 +1269,16 @@ public class BlueprintConfigurationProcessor {
    *         elements in this property
    */
   private static String[] splitAndTrimStrings(String propertyName) {
-    List<String> namesWithoutWhitespace = new LinkedList<>();
-    for (String service : propertyName.split(",")) {
-      namesWithoutWhitespace.add(service.trim());
-    }
+    if(propertyName != null) {
+      List<String> namesWithoutWhitespace = new LinkedList<>();
+      for (String service : propertyName.split(",")) {
+        namesWithoutWhitespace.add(service.trim());
+      }
 
-    return namesWithoutWhitespace.toArray(new String[namesWithoutWhitespace.size()]);
+      return namesWithoutWhitespace.toArray(new String[namesWithoutWhitespace.size()]);
+    } else {
+      return new String[0];
+    }
   }
 
   /**
@@ -1333,15 +1338,60 @@ public class BlueprintConfigurationProcessor {
                                              ClusterTopology topology);
   }
 
+  private static class HostGroupUpdater implements PropertyUpdater {
+
+    public static final PropertyUpdater INSTANCE = new HostGroupUpdater();
+
+    @Override
+    public String updateForClusterCreate(String propertyName,
+      String origValue,
+      Map<String, Map<String, String>> properties,
+      ClusterTopology topology) {
+
+      //todo: getHostStrings
+      Matcher m = HOSTGROUP_REGEX.matcher(origValue);
+      if (m.find()) {
+        String hostGroupName = m.group(1);
+
+        HostGroupInfo groupInfo = topology.getHostGroupInfo().get(hostGroupName);
+        if (groupInfo == null) {
+          //todo: this should be validated in configuration validation
+          throw new RuntimeException(
+            "Encountered a host group token in configuration which couldn't be matched to a host group: "
+              + hostGroupName);
+        }
+
+        //todo: warn if > hosts
+        return origValue.replace(m.group(0), groupInfo.getHostNames().iterator().next());
+      }
+
+      return origValue;
+    }
+
+    @Override
+    public Collection<String> getRequiredHostGroups(String propertyName,
+      String origValue,
+      Map<String, Map<String, String>> properties,
+      ClusterTopology topology) {
+      //todo: getHostStrings
+      Matcher m = HOSTGROUP_REGEX.matcher(origValue);
+      if (m.find()) {
+        String hostGroupName = m.group(1);
+        return Collections.singleton(hostGroupName);
+      }
+      return Collections.emptySet();
+    }
+  }
+
   /**
    * Topology based updater which replaces the original host name of a property with the host name
    * which runs the associated (master) component in the new cluster.
    */
-  private static class SingleHostTopologyUpdater implements PropertyUpdater {
+  private static class SingleHostTopologyUpdater extends HostGroupUpdater {
     /**
      * Component name
      */
-    private String component;
+    private final String component;
 
     /**
      * Constructor.
@@ -1368,21 +1418,9 @@ public class BlueprintConfigurationProcessor {
                                          Map<String, Map<String, String>> properties,
                                          ClusterTopology topology)  {
 
-      //todo: getHostStrings
-      Matcher m = HOSTGROUP_REGEX.matcher(origValue);
-      if (m.find()) {
-        String hostGroupName = m.group(1);
-
-        HostGroupInfo groupInfo = topology.getHostGroupInfo().get(hostGroupName);
-        if (groupInfo == null) {
-          //todo: this should be validated in configuration validation
-          throw new RuntimeException(
-              "Encountered a host group token in configuration which couldn't be matched to a host group: "
-              + hostGroupName);
-        }
-
-        //todo: warn if > hosts
-        return origValue.replace(m.group(0), groupInfo.getHostNames().iterator().next());
+      String replacedValue = super.updateForClusterCreate(propertyName, origValue, properties, topology);
+      if (!Objects.equals(origValue, replacedValue)) {
+        return replacedValue;
       } else {
         int matchingGroupCount = topology.getHostGroupsForComponent(component).size();
         if (matchingGroupCount == 1) {
@@ -1492,10 +1530,9 @@ public class BlueprintConfigurationProcessor {
                                                     Map<String, Map<String, String>> properties,
                                                     ClusterTopology topology) {
       //todo: getHostStrings
-      Matcher m = HOSTGROUP_REGEX.matcher(origValue);
-      if (m.find()) {
-        String hostGroupName = m.group(1);
-        return Collections.singleton(hostGroupName);
+      Collection<String> result = super.getRequiredHostGroups(propertyName, origValue, properties, topology);
+      if (!result.isEmpty()) {
+        return result;
       } else {
         Collection<String> matchingGroups = topology.getHostGroupsForComponent(component);
         int matchingGroupCount = matchingGroups.size();
@@ -2352,6 +2389,7 @@ public class BlueprintConfigurationProcessor {
     allUpdaters.add(nonTopologyUpdaters);
 
     Map<String, PropertyUpdater> amsSiteMap = new HashMap<>();
+    Map<String, PropertyUpdater> druidCommon = new HashMap<>();
     Map<String, PropertyUpdater> hdfsSiteMap = new HashMap<>();
     Map<String, PropertyUpdater> mapredSiteMap = new HashMap<>();
     Map<String, PropertyUpdater> coreSiteMap = new HashMap<>();
@@ -2404,6 +2442,7 @@ public class BlueprintConfigurationProcessor {
     Map<String, PropertyUpdater> zookeeperEnvMap = new HashMap<>();
 
     singleHostTopologyUpdaters.put("ams-site", amsSiteMap);
+    singleHostTopologyUpdaters.put("druid-common", druidCommon);
     singleHostTopologyUpdaters.put("hdfs-site", hdfsSiteMap);
     singleHostTopologyUpdaters.put("mapred-site", mapredSiteMap);
     singleHostTopologyUpdaters.put("core-site", coreSiteMap);
@@ -2731,7 +2770,7 @@ public class BlueprintConfigurationProcessor {
     atlasPropsMap.put("atlas.kafka.bootstrap.servers", new MultipleHostTopologyUpdater("KAFKA_BROKER"));
     atlasPropsMap.put("atlas.kafka.zookeeper.connect", new MultipleHostTopologyUpdater("ZOOKEEPER_SERVER"));
     atlasPropsMap.put("atlas.graph.index.search.solr.zookeeper-url", new MultipleHostTopologyUpdater("ZOOKEEPER_SERVER", ',', false, true, true));
-    atlasPropsMap.put("atlas.graph.storage.hostname", new MultipleHostTopologyUpdater("HBASE_MASTER"));
+    atlasPropsMap.put("atlas.graph.storage.hostname", new MultipleHostTopologyUpdater("ZOOKEEPER_SERVER"));
     atlasPropsMap.put("atlas.audit.hbase.zookeeper.quorum", new MultipleHostTopologyUpdater("ZOOKEEPER_SERVER"));
 
     // RANGER_ADMIN
@@ -2789,6 +2828,11 @@ public class BlueprintConfigurationProcessor {
         }
       }
     });
+
+    // DRUID
+    druidCommon.put("metastore_hostname", HostGroupUpdater.INSTANCE);
+    druidCommon.put("druid.metadata.storage.connector.connectURI", HostGroupUpdater.INSTANCE);
+    druidCommon.put("druid.zk.service.host", new MultipleHostTopologyUpdater("ZOOKEEPER_SERVER"));
   }
 
   private Collection<String> setupHDFSProxyUsers(Configuration configuration, Set<String> configTypesUpdated) {
@@ -2953,7 +2997,8 @@ public class BlueprintConfigurationProcessor {
 
     Set<String> properties = Sets.newHashSet(ConfigHelper.CLUSTER_ENV_STACK_NAME_PROPERTY,
         ConfigHelper.CLUSTER_ENV_STACK_ROOT_PROPERTY, ConfigHelper.CLUSTER_ENV_STACK_TOOLS_PROPERTY,
-        ConfigHelper.CLUSTER_ENV_STACK_FEATURES_PROPERTY);
+        ConfigHelper.CLUSTER_ENV_STACK_FEATURES_PROPERTY,
+        ConfigHelper.CLUSTER_ENV_STACK_PACKAGES_PROPERTY);
 
     try {
       Map<String, Map<String, String>> defaultStackProperties = configHelper.getDefaultStackProperties(stackId);

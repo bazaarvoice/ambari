@@ -23,6 +23,7 @@ from resource_management.libraries.functions import format
 from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from resource_management.libraries.functions import StackFeature
+from resource_management.libraries.functions import upgrade_summary
 from resource_management.libraries.functions.stack_features import check_stack_feature
 from resource_management.libraries.functions.default import default
 from resource_management.libraries.functions import get_kinit_path
@@ -30,12 +31,13 @@ from resource_management.libraries.functions import get_port_from_url
 from resource_management.libraries.functions.get_not_managed_resources import get_not_managed_resources
 from resource_management.libraries.functions.setup_atlas_hook import has_atlas_in_cluster
 from resource_management.libraries.script.script import Script
-from resource_management.libraries.functions.get_lzo_packages import get_lzo_packages
+from resource_management.libraries.functions.lzo_utils import should_install_lzo
 from resource_management.libraries.functions.expect import expect
 from resource_management.libraries.functions.get_architecture import get_architecture
 from resource_management.libraries.functions.stack_features import get_stack_feature_version
 from resource_management.libraries.functions.stack_tools import get_stack_name
 from resource_management.libraries.functions.version import get_major_version
+
 
 from resource_management.core.utils import PasswordString
 from ambari_commons.credential_store_helper import get_password_from_credential_store
@@ -54,6 +56,8 @@ architecture = get_architecture()
 
 # Needed since this writes out the Atlas Hive Hook config file.
 cluster_name = config['clusterName']
+serviceName = config['serviceName']
+role = config['role']
 
 hostname = config["hostname"]
 
@@ -70,6 +74,9 @@ stack_root = status_params.stack_root
 # The source stack will be present during a cross-stack upgrade.
 # E.g., BigInsights-4.2.5 or HDP-2.6
 source_stack = default("/commandParams/source_stack", None)
+if source_stack is None:
+  source_stack = upgrade_summary.get_source_stack("OOZIE")
+
 # This variable name is important, do not change
 source_stack_name = get_stack_name(source_stack)
 
@@ -380,8 +387,4 @@ HdfsResource = functools.partial(
 
 is_webhdfs_enabled = config['configurations']['hdfs-site']['dfs.webhdfs.enabled']
 
-# The logic for LZO also exists in HDFS' params.py
-io_compression_codecs = default("/configurations/core-site/io.compression.codecs", None)
-lzo_enabled = io_compression_codecs is not None and "com.hadoop.compression.lzo" in io_compression_codecs.lower()
-
-all_lzo_packages = get_lzo_packages(stack_version_unformatted)
+lzo_enabled = should_install_lzo()

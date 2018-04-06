@@ -97,10 +97,6 @@
               a {
                 cursor: pointer;
               }
-              .icon-undo {
-                color: rgb(243, 178, 11);
-                margin-right: 2px;
-              }
             }
           }
         }
@@ -129,8 +125,10 @@
     max-height: 563px;
     max-width: 340px;
     margin: -250px 0 0 -180px;
+    overflow: visible;
     .modal-body {
       padding: 0px 0px;
+      overflow: visible;
     }
   }
   .version-box-in-popup.version-box {
@@ -144,7 +142,9 @@
 }
 
 #stack-upgrade-page,
-.version-box-popup {
+.version-box-popup,
+.install-repo-confirmation,
+.revert-patch-upgrade-confirmation {
   .versions-slides {
     overflow-x: auto;
     padding-bottom: 25px;
@@ -156,15 +156,11 @@
   }
   .left-menu-table {
     padding: 10px 0;
-    margin-top: 124px;
+    margin-top: 149px;
     td.service-display-name {
       border-top: 2px solid #e4e4e4;
       border-bottom: 2px solid #e4e4e4;
     }
-  }
-  div.current-version-box {
-    background: none repeat scroll 0 0 #e6f1f6;
-    box-shadow: 0 8px 6px -6px black;
   }
   .version-box {
     position: relative;
@@ -182,14 +178,23 @@
       position: absolute;
       left: -8px;
       color: orange;
+      z-index: 3;
+      height: 24px;
+      width: 24px;
+      border-radius: 24px;
+      background-color: #fff;
+      &:before{
+        position: relative;
+        top:-4px;
+      }
     }
     .state {
-      margin: 15px 0;
+      margin: 15px 0 30px;
       line-height: 30px;
       padding-top: 5px;
       height: 30px;
       i {
-        color: #0088cc;
+        color: #fff;
         font-size: 16px;
       }
       i[disabled='disabled'] {
@@ -204,16 +209,16 @@
       }
       .dropdown-menu {
         cursor: pointer;
+        text-align: left;
       }
     }
-    .installing {
+    .installing, .upgrading {
       margin-top: 10px;
-      padding-top: 0;
-      padding-bottom: 10px;
+      padding: 0;
       .progress {
         height: 15px;
         width: 60%;
-        margin: 0 20%;
+        margin: 5px 20%;
       }
     }
     .host-link a {
@@ -268,62 +273,155 @@
     .hosts-section .host-link {
       font-size: 12px;
     }
+    .revert-dropdown{
+      position: absolute;
+      top: 0;
+      width: 100%;
+      z-index: 1000;
+      .btn {
+        position: relative;
+        top: 3px;
+        float: right;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        outline: none;
+        .caret{
+          border-top-color: #fff;
+        }
+      }
+      .dropdown-menu{
+        right: 0;
+        cursor: pointer;
+      }
+    }
   }
   .version-column {
     min-height: 500px;
-    width: 115px;
-    margin: 15px 7px 0px 7px;
+    min-width: 190px;
+    margin: 15px 7px 0 7px;
+    padding-top: 0;
+    background-color: #efefef;
     .version-column-display-name {
       color: #000;
       text-align: center;
       font-weight: 500;
       font-size: 16px;
       line-height: 18px;
-      padding: 5px 5px;
-      margin-bottom: 0px;
+      padding: 5px 5px 0 5px;
+      margin-bottom: 0;
+      min-height: 36px;
     }
     .version-column-show-details {
       text-align: center;
       font-size: 13px;
       padding: 5px 5px;
-      border-bottom: 1px solid #e4e4e4;
-      margin-bottom: 0px;
+      margin-bottom: 18px;
       a {
         cursor: pointer;
       }
     }
+    .patch-icon {
+      margin: 0 0 -5px 0;
+    }
+    .icon-undo {
+      color: #000;
+      padding: 2px 3px;
+      border-radius: 15px;
+      border: 1px solid #000;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-block;
+    }
     .state {
-      margin: 5px 0px 15px 0px;
-      line-height: 20px;
-      .label-success {
-        line-height: 30px;
+      margin: 10px 0;
+      .top-label {
+        font-size: inherit;
+        border-radius: 0;
+        width: 100%;
+        display: inline-block;
+        padding: 0;
+        line-height: 35px;
+        height: 30px;
+        position: relative;
+        z-index: 2;
+        &:after,&:before{
+          content: '';
+          position: absolute;
+          top: 100%;
+          width: 100%;
+          height: 100%;
+          background-color: @current-green;
+          z-index: -1;
+        }
+        &:after{
+          left: -49%;
+          transform: rotate(5deg) translate(0,-94%);
+        }
+        &:before {
+          left: 51%;
+          transform: rotate(175deg) translate(0,94%);
+        }
+
       }
-      .btn.btn-primary:not(.dropdown-toggle) {
-        padding: 4px 5px;
-        min-width: 70px;
+      .btn-group {
+        display: inline-block;
+        width: 100%;
+        .btn:not(.dropdown-toggle) {
+          width: 81%;
+          border-radius: 0;
+          padding: 5px 5px;
+          min-width: 70px;
+        }
+        .dropdown-toggle {
+          width: 20%;
+          border-radius: 0;
+          padding: 5px 5px;
+          height: 32px;
+        }
+      }
+      .btn {
+        width: 100%;
+        border-radius: 0;
+        padding: 5px 5px;
+        height: 32px;
+        &:focus{
+          background-color: #0044cc;
+        }
       }
       .open .dropdown-menu {
-        min-width: 90px;
+        min-width: 100px;
+        right: 0;
       }
     }
-    .state.installing {
-      padding-bottom: 5px;
-      margin: 10px 0px;
+    .state.installing, .state.upgrading {
+      margin-top: 0;
+      margin-bottom: 23px;
+      background-color: #006dcc;
+      height: 32px;
+      line-height: 32px;
+      font-size: 13px;
+      a{
+        color: #fff;
+      }
+      &.attach-top{
+        background-color: transparent;
+        font-size: 14px;
+      }
+    }
+    .state.attach-top {
+      margin: 0;
+      line-height: 20px;
+      padding-top: 0;
+      padding-bottom: 25px;
+      &.overflow{
+        overflow: hidden;
+      }
     }
     .services-section {
       width: 100%;
       text-align: center;
       padding-bottom: 4px;
-      .service-version-info {
-        margin-bottom: 14px;
-        text-align: center;
-        span.label {
-          padding: 5px 15px;
-          background-color: #a3a3a3;
-          z-index: 100;
-          position: relative;
-        }
-      }
       .line-separator, .line-separator-bottom{
         height: 2px;
         background: #e4e4e4;
@@ -337,105 +435,70 @@
         top: -5px;
       }
     }
+    .not-upgradable {
+      padding-left: 10px;
+      margin-right: -20px;
+      cursor: pointer;
+    }
+    .icon-info-sign {
+      color: @blue;
+    }
+    .icon-wrench, .icon-bug {
+      color: @gray;
+    }
   }
-  div.current-version-box.version-column {
-    .services-section{
-      .service-version-info {
-        span.label {
-          background-color: #468847;
-        }
+  .service-version-info {
+    margin-bottom: 14px;
+    text-align: center;
+    span.label {
+      padding: 5px 15px;
+      background-color: #a3a3a3;
+      z-index: 100;
+      position: relative;
+    }
+    span.label.available {
+      background-color: @current-green;;
+    }
+  }
+}
+
+.revert-patch-upgrade-confirmation {
+  table {
+    td, th {
+      padding: 5px 15px;
+    }
+  }
+}
+
+.install-repo-confirmation {
+  .available-services-list {
+    margin: 10px 0 30px;
+    .service-version-info {
+      text-align: left;
+      margin-bottom: 20px;
+      .span1 {
+        width: 90px;
       }
     }
-
-
   }
 }
 
-#stack-upgrade-dialog {
-  .details-box {
-    padding: 5px;
-    margin-left: 15px;
-    margin-right: 95px;
-    margin-top: 10px;
-    .button-row {
-      text-align: right;
-      padding: 5px;
-    }
-    input[type="checkbox"] {
-      margin: 0;
-    }
-    .message {
-      line-height: 30px;
-    }
-  }
-  .task-details {
-    .manage-controls a {
-      cursor: pointer;
-      margin-right: 12px;
-    }
-    textarea {
-      width: 100%;
-      min-height: 100px;
-      box-sizing: border-box;
-    }
-  }
-  .task-list {
-    overflow-x: hidden;
-    .progress {
-      margin-bottom: 0;
-    }
-    padding-left: 20px;
-    i {
-      margin-right: 5px;
-    }
-  }
-  .task-list-main-warp i {
-    font-size: 16px;
-  }
-  ul.failed-info-list {
-    max-height: 500px;
-    margin-top: 5px;
-  }
-  .upgrade-options-link {
-    position: absolute;
-    cursor: pointer;
-    right: 10%;
-    top: 13px;
-    width: 100px;
-    a {
-      font-size: 13px;
-    }
-    .icon-cogs {
-      color: #0088cc;
-      margin-right: 3px;
-    }
-  }
-  .upgrade-options-link.disabled {
-    cursor: not-allowed;
-    a, .icon-cogs {
-      color: #808080;
-    }
-    a:hover {
-      text-decoration: none;
-    }
-  }
-}
-
+#stack-upgrade-dialog,
 #stack-upgrade-record-dialog {
+  margin-top: 5px;
   .details-box {
     padding: 5px;
-    margin-left: 15px;
-    margin-right: 95px;
-    .button-row {
-      text-align: right;
-      padding: 5px;
-    }
+    margin-top: 5px;
     input[type="checkbox"] {
       margin: 0;
     }
     .message {
       line-height: 30px;
     }
+  }
+  .button-row {
+    text-align: right;
+    padding: 5px;
   }
   .task-details {
     .manage-controls a {
@@ -460,33 +523,58 @@
   }
   .task-list-main-warp i {
     font-size: 16px;
+    vertical-align: baseline;
   }
   ul.failed-info-list {
     max-height: 500px;
     margin-top: 5px;
   }
-  .upgrade-options-link {
-    position: absolute;
-    cursor: pointer;
-    right: 10%;
-    top: 13px;
-    width: 100px;
-    a {
-      font-size: 13px;
-    }
-    .icon-cogs {
-      color: #0088cc;
-      margin-right: 3px;
+  .pause-button {
+    margin-top: -5px;
+    i {
+      padding-right: 4px;
+      font-size: 15px;
     }
   }
-  .upgrade-options-link.disabled {
-    cursor: not-allowed;
-    a, .icon-cogs {
-      color: #808080;
+  .active-task-label {
+    padding: 8px 15px;
+    display: inline-block;
+  }
+  .upgrade-groups {
+    padding-left: 0;
+    .progress {
+      width: 85%;
+      display: inline-block;
     }
-    a:hover {
-      text-decoration: none;
+    .percent {
+      display: inline-block;
+      vertical-align: top;
     }
+  }
+}
+
+.upgrade-options-link {
+  cursor: pointer;
+  display: inline-block;
+  padding-left: 20px;
+  vertical-align: bottom;
+  a {
+    font-size: 14px;
+    font-weight: normal;
+  }
+  .icon-cogs {
+    font-size: 16px;
+    color: #0088cc;
+    margin-right: 3px;
+  }
+}
+.upgrade-options-link.disabled {
+  cursor: not-allowed;
+  a, .icon-cogs {
+    color: #808080;
+  }
+  a:hover {
+    text-decoration: none;
   }
 }
 
@@ -500,9 +588,6 @@
   }
 }
 
-.upgrade-options-popup .modal .modal-body {
-  min-height: 295px;
-}
 #upgrade-options-popup-content {
   .method-options {
     margin: 10px;
@@ -557,6 +642,9 @@
     }
     .thumbnail.not-allowed {
       cursor: not-allowed;
+      &.default-cursor{
+        cursor: default;
+      }
     }
   }
 
@@ -774,5 +862,46 @@
     width: 530px;
     margin-left: -15px;
     border-bottom: 1px solid #eee;
+  }
+}
+
+#upgrade-summary-table {
+  & > tbody > tr {
+    cursor: pointer;
+  }
+  .wide-column {
+    width: 14%;
+  }
+  .widest-column{
+    width: 20%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .accordion-group {
+    border-right: none;
+    border-bottom: none;
+  }
+  .accordion-inner {
+    border-top: none;
+    padding-left: 0;
+    padding-top: 20px;
+  }
+  .accordion-heading {
+    background-color: transparent;
+  }
+  .accordion-toggle {
+    padding: 5px;
+    display: inline-block;
+    float: left;
+    line-height: 10px;
+    margin-left: -20px;
+  }
+  .accordion-body {
+    min-width: 350px;
+    .service-name {
+      text-align: left;
+      min-width: 95px;
+    }
   }
 }

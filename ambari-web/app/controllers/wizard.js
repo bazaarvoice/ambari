@@ -919,7 +919,7 @@ App.WizardController = Em.Controller.extend(App.LocalStorage, App.ThemesMappingM
           _configProperties.get('filename'),
           // need to invert boolean because this argument will be inverted in method body
           !_configProperties.get('isUserProperty'),
-          _configProperties.getProperties('value', 'isRequired', 'errorMessage', 'warnMessage')
+          _configProperties.getProperties('value', 'isRequired', 'errorMessage', 'warnMessage', 'propertyType')
         );
         configProperty = App.config.mergeStaticProperties(configProperty, _configProperties, [], ['name', 'filename', 'isUserProperty', 'value']);
 
@@ -1220,11 +1220,7 @@ App.WizardController = Em.Controller.extend(App.LocalStorage, App.ThemesMappingM
    * Will be used at <code>Assign Masters(step5)</code> step
    */
   loadConfirmedHosts: function () {
-    var hosts = App.db.getHosts();
-
-    if (hosts) {
-      this.set('content.hosts', hosts);
-    }
+    this.set('content.hosts', this.getDBProperty('hosts') || {});
   },
 
   loadHosts: function () {

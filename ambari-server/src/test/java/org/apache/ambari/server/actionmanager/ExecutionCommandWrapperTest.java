@@ -43,19 +43,18 @@ import org.apache.ambari.server.state.Cluster;
 import org.apache.ambari.server.state.Clusters;
 import org.apache.ambari.server.state.ConfigFactory;
 import org.apache.ambari.server.state.ConfigHelper;
-import org.apache.ambari.server.state.RepositoryVersionState;
+import org.apache.ambari.server.state.Service;
 import org.apache.ambari.server.state.StackId;
 import org.apache.ambari.server.state.svccomphost.ServiceComponentHostStartEvent;
 import org.apache.ambari.server.utils.StageUtils;
 import org.codehaus.jettison.json.JSONException;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.inject.Guice;
 import com.google.inject.Injector;
-
-import junit.framework.Assert;
 
 public class ExecutionCommandWrapperTest {
 
@@ -111,9 +110,14 @@ public class ExecutionCommandWrapperTest {
 
     clusters = injector.getInstance(Clusters.class);
     clusters.addHost(HOST1);
-    clusters.addCluster(CLUSTER1, new StackId("HDP-0.1"));
+    StackId stackId = new StackId("HDP-0.1");
+    clusters.addCluster(CLUSTER1, stackId);
 
     Cluster cluster1 = clusters.getCluster(CLUSTER1);
+
+    OrmTestHelper helper = injector.getInstance(OrmTestHelper.class);
+    RepositoryVersionEntity repositoryVersion = helper.getOrCreateRepositoryVersion(cluster1);
+    cluster1.addService("HDFS", repositoryVersion);
 
     SERVICE_SITE_CLUSTER = new HashMap<>();
     SERVICE_SITE_CLUSTER.put(SERVICE_SITE_NAME1, SERVICE_SITE_VAL1);
@@ -136,19 +140,19 @@ public class ExecutionCommandWrapperTest {
     CONFIG_ATTRIBUTES = new HashMap<>();
 
     //Cluster level global config
-    configFactory.createNew(cluster1, GLOBAL_CONFIG, CLUSTER_VERSION_TAG, GLOBAL_CLUSTER,
+    configFactory.createNew(stackId, cluster1, GLOBAL_CONFIG, CLUSTER_VERSION_TAG, GLOBAL_CLUSTER,
         CONFIG_ATTRIBUTES);
 
     //Cluster level service config
-    configFactory.createNew(cluster1, SERVICE_SITE_CONFIG, CLUSTER_VERSION_TAG,
+    configFactory.createNew(stackId, cluster1, SERVICE_SITE_CONFIG, CLUSTER_VERSION_TAG,
         SERVICE_SITE_CLUSTER, CONFIG_ATTRIBUTES);
 
     //Service level service config
-    configFactory.createNew(cluster1, SERVICE_SITE_CONFIG, SERVICE_VERSION_TAG,
+    configFactory.createNew(stackId, cluster1, SERVICE_SITE_CONFIG, SERVICE_VERSION_TAG,
         SERVICE_SITE_SERVICE, CONFIG_ATTRIBUTES);
 
     //Host level service config
-    configFactory.createNew(cluster1, SERVICE_SITE_CONFIG, HOST_VERSION_TAG, SERVICE_SITE_HOST,
+    configFactory.createNew(stackId, cluster1, SERVICE_SITE_CONFIG, HOST_VERSION_TAG, SERVICE_SITE_HOST,
         CONFIG_ATTRIBUTES);
 
     ActionDBAccessor db = injector.getInstance(ActionDBAccessorImpl.class);
@@ -173,8 +177,6 @@ public class ExecutionCommandWrapperTest {
 
   @Test
   public void testGetExecutionCommand() throws JSONException, AmbariException {
-
-
     Map<String, Map<String, String>> confs = new HashMap<>();
     Map<String, String> configurationsGlobal = new HashMap<>();
     configurationsGlobal.put(GLOBAL_NAME1, GLOBAL_VAL1);
@@ -289,10 +291,89 @@ public class ExecutionCommandWrapperTest {
     Cluster cluster = clusters.getCluster(CLUSTER1);
 
     StackId stackId = cluster.getDesiredStackVersion();
+    
+    // set the repo version resolved state to verify that the version is not sent
     RepositoryVersionEntity repositoryVersion = ormTestHelper.getOrCreateRepositoryVersion(stackId, "0.1-0000");
+    repositoryVersion.setResolved(false);
+    ormTestHelper.repositoryVersionDAO.merge(repositoryVersion);
 
-    cluster.createClusterVersion(stackId, repositoryVersion.getVersion(), "admin",
-        RepositoryVersionState.INSTALLING);
+    Service service = cluster.getService("HDFS");
+    service.setDesiredRepositoryVersion(repositoryVersion);
+
+    // first try with an INSTALL command - this should not populate version info
+    ExecutionCommand executionCommand = new ExecutionCommand();
+    Map<String, String> commandParams = new HashMap<>();
+
+    executionCommand.setClusterName(CLUSTER1);
+    executionCommand.setTaskId(1);
+    executionCommand.setRequestAndStage(1, 1);
+    executionCommand.setHostname(HOST1);
+    executionCommand.setRole("NAMENODE");
+    executionCommand.setRoleParams(Collections.<String, String>emptyMap());
+    executionCommand.setRoleCommand(RoleCommand.INSTALL);
+    executionCommand.setServiceName("HDFS");
+    executionCommand.setCommandType(AgentCommandType.EXECUTION_COMMAND);
+    executionCommand.setCommandParams(commandParams);
+
+    String json = StageUtils.getGson().toJson(executionCommand, ExecutionCommand.class);
+    ExecutionCommandWrapper execCommWrap = new ExecutionCommandWrapper(json);
+    injector.injectMembers(execCommWrap);
+
+    ExecutionCommand processedExecutionCommand = execCommWrap.getExecutionCommand();
+    commandParams = processedExecutionCommand.getCommandParams();
+    Assert.assertFalse(commandParams.containsKey(KeyNames.VERSION));
+
+    // now try with a START command, but still unresolved
+    executionCommand = new ExecutionCommand();
+    commandParams = new HashMap<>();
+
+    executionCommand.setClusterName(CLUSTER1);
+    executionCommand.setTaskId(1);
+    executionCommand.setRequestAndStage(1, 1);
+    executionCommand.setHostname(HOST1);
+    executionCommand.setRole("NAMENODE");
+    executionCommand.setRoleParams(Collections.<String, String> emptyMap());
+    executionCommand.setRoleCommand(RoleCommand.START);
+    executionCommand.setServiceName("HDFS");
+    executionCommand.setCommandType(AgentCommandType.EXECUTION_COMMAND);
+    executionCommand.setCommandParams(commandParams);
+
+    json = StageUtils.getGson().toJson(executionCommand, ExecutionCommand.class);
+    execCommWrap = new ExecutionCommandWrapper(json);
+    injector.injectMembers(execCommWrap);
+
+    processedExecutionCommand = execCommWrap.getExecutionCommand();
+    commandParams = processedExecutionCommand.getCommandParams();
+    Assert.assertFalse(commandParams.containsKey(KeyNames.VERSION));
+
+    // now that the repositoryVersion is resolved, it should populate the version even
+    // though the state is INSTALLING
+    repositoryVersion.setResolved(true);
+    ormTestHelper.repositoryVersionDAO.merge(repositoryVersion);
+    execCommWrap = new ExecutionCommandWrapper(json);
+    injector.injectMembers(execCommWrap);
+
+    processedExecutionCommand = execCommWrap.getExecutionCommand();
+    commandParams = processedExecutionCommand.getCommandParams();
+    Assert.assertEquals("0.1-0000", commandParams.get(KeyNames.VERSION));
+  }
+
+  /**
+   * Test that the execution command wrapper ignores repository file when there are none to use.
+   */
+  @Test
+  public void testExecutionCommandNoRepositoryFile() throws Exception {
+    Cluster cluster = clusters.getCluster(CLUSTER1);
+
+    StackId stackId = cluster.getDesiredStackVersion();
+    RepositoryVersionEntity repositoryVersion = ormTestHelper.getOrCreateRepositoryVersion(stackId, "0.1-0000");
+    repositoryVersion.setResolved(true); // has build number
+    Service service = cluster.getService("HDFS");
+    service.setDesiredRepositoryVersion(repositoryVersion);
+
+    repositoryVersion.setOperatingSystems("[]");
+
+    ormTestHelper.repositoryVersionDAO.merge(repositoryVersion);
 
     // first try with an INSTALL command - this should not populate version info
     ExecutionCommand executionCommand = new ExecutionCommand();

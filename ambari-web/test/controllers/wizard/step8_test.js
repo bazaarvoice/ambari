@@ -91,11 +91,11 @@ describe('App.WizardStep8Controller', function () {
 
     tests.forEach(function (test) {
       it(test.selectedServices.join(','), function () {
-        var services = test.selectedServices.map(function (serviceName) {
+        var mappedServices = test.selectedServices.map(function (serviceName) {
           return Em.Object.create({isSelected: true, isInstalled: false, serviceName: serviceName});
         });
         installerStep8Controller = App.WizardStep8Controller.create({
-          content: {controllerName: 'addServiceController', services: services},
+          content: {controllerName: 'addServiceController', services: mappedServices},
           configs: configs
         });
         var serviceData = installerStep8Controller.createSelectedServicesData();
@@ -2315,5 +2315,4 @@ describe('App.WizardStep8Controller', function () {
     });
 
   });
-
 });

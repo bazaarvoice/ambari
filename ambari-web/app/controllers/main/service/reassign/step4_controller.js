@@ -108,13 +108,20 @@ App.ReassignMasterWizardStep4Controller = App.HighAvailabilityProgressPageContro
    */
   setDependentHostComponents: function (componentName) {
     var installedServices = App.Service.find().mapProperty('serviceName');
-    var installedComponents = App.Host.find(this.get('content.reassignHosts.target'))
+    var hostInstalledComponents = App.Host.find(this.get('content.reassignHosts.target'))
         .get('hostComponents')
+        .mapProperty('componentName');
+    var clusterInstalledComponents = App.MasterComponent.find().toArray()
+        .concat(App.ClientComponent.find().toArray())
+        .concat(App.SlaveComponent.find().toArray())
+        .filter(function(service){
+          return service.get("totalCount") > 0;
+        })
         .mapProperty('componentName');
     var dependenciesToInstall = App.StackServiceComponent.find(componentName)
         .get('dependencies')
         .filter(function (component) {
-          return !installedComponents.contains(component.componentName) && installedServices.contains(component.serviceName);
+          return !(component.scope == 'host' ? hostInstalledComponents : clusterInstalledComponents).contains(component.componentName) && (installedServices.contains(component.serviceName));
         })
         .mapProperty('componentName');
     this.set('dependentHostComponents', dependenciesToInstall);
@@ -231,7 +238,13 @@ App.ReassignMasterWizardStep4Controller = App.HighAvailabilityProgressPageContro
    * make server call to stop services
    */
   stopRequiredServices: function () {
-    this.stopServices(this.get('wizardController.relatedServicesMap')[this.get('content.reassign.component_name')], true);
+    var componentName = this.get('content.reassign.component_name');
+    var servicesToStop = this.get('wizardController.relatedServicesMap')[componentName];
+    if (this.get('content.componentsToStopAllServices').contains(componentName)) {
+      this.stopServices(servicesToStop, true, true);
+    } else {
+      this.stopServices(servicesToStop, true);
+    }
   },
 
   createHostComponents: function () {

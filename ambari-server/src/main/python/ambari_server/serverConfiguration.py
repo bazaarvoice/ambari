@@ -40,6 +40,7 @@ from ambari_server.properties import Properties
 from ambari_server.userInput import get_validated_string_input
 from ambari_server.utils import compare_versions, locate_file, on_powerpc
 from ambari_server.ambariPath import AmbariPath
+from ambari_server.userInput import get_YN_input
 
 
 OS_VERSION = OSCheck().get_os_major_version()
@@ -189,6 +190,9 @@ SETUP_OR_UPGRADE_MSG = "- If this is a new setup, then run the \"ambari-server s
                        "- If this is an upgrade of an existing setup, run the \"ambari-server upgrade\" command.\n" \
                        "Refer to the Ambari documentation for more information on setup and upgrade."
 
+GPL_LICENSE_PROMPT_TEXT = """GPL License for LZO: https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html
+Enable Ambari Server to download and install GPL Licensed LZO packages [y/n] (n)? """
+
 DEFAULT_DB_NAME = "ambari"
 
 SECURITY_KEYS_DIR = "security.server.keys_dir"
@@ -203,6 +207,9 @@ BOOTSTRAP_SETUP_AGENT_SCRIPT = 'bootstrap.setup_agent.script'
 STACKADVISOR_SCRIPT = 'stackadvisor.script'
 PID_DIR_PROPERTY = 'pid.dir'
 SERVER_TMP_DIR_PROPERTY = "server.tmp.dir"
+
+GPL_LICENSE_ACCEPTED_PROPERTY = 'gpl.license.accepted'
+
 REQUIRED_PROPERTIES = [OS_FAMILY_PROPERTY, OS_TYPE_PROPERTY, COMMON_SERVICES_PATH_PROPERTY, SERVER_VERSION_FILE_PATH,
                        WEBAPP_DIR_PROPERTY, STACK_LOCATION_KEY, SECURITY_KEYS_DIR, JDBC_DATABASE_NAME_PROPERTY,
                        NR_USER_PROPERTY, JAVA_HOME_PROPERTY, JDBC_PASSWORD_PROPERTY, SHARED_RESOURCES_DIR,
@@ -214,6 +221,9 @@ REQUIRED_PROPERTIES = [OS_FAMILY_PROPERTY, OS_TYPE_PROPERTY, COMMON_SERVICES_PAT
 SETUP_DONE_PROPERTIES = [OS_FAMILY_PROPERTY, OS_TYPE_PROPERTY, JDK_NAME_PROPERTY, JDBC_DATABASE_PROPERTY,
                          NR_USER_PROPERTY, PERSISTENCE_TYPE_PROPERTY
 ]
+
+def get_default_views_dir():
+  return AmbariPath.get("/var/lib/ambari-server/resources/views")
 
 def get_conf_dir():
   try:
@@ -354,7 +364,7 @@ class ServerConfigDefaults(object):
     properties = get_ambari_properties()
     if properties == -1:
       print_error_msg("Error getting ambari properties")
-  
+
     self.JAVA_SHARE_PATH = "/usr/share/java"
     self.SHARE_PATH = "/usr/share"
     self.OUT_DIR = parse_log4j_file(get_conf_dir() + "/log4j.properties")['ambari.log.dir'].replace("//", "/")
@@ -379,10 +389,10 @@ class ServerConfigDefaults(object):
       self.PID_DIR = properties.get_property(PID_DIR_PROPERTY)
       self.BOOTSTRAP_DIR = properties.get_property(BOOTSTRAP_DIR_PROPERTY)
       self.RECOMMENDATIONS_DIR = properties.get_property(RECOMMENDATIONS_DIR_PROPERTY)
-    
+
     # this directories should be pre-created by user and be writable.
     self.check_if_directories_writable([self.OUT_DIR, self.PID_DIR])
-    
+
     self.DEFAULT_LIBS_DIR = ""
     self.DEFAULT_VLIBS_DIR = ""
 
@@ -422,7 +432,7 @@ class ServerConfigDefaults(object):
     self.MESSAGE_ERROR_RESET_NOT_ROOT = ""
     self.MESSAGE_ERROR_UPGRADE_NOT_ROOT = ""
     self.MESSAGE_CHECK_FIREWALL = ""
-    
+
   def check_if_directories_writable(self, directories):
     for directory in directories:
       if not os.path.isdir(directory):
@@ -431,7 +441,7 @@ class ServerConfigDefaults(object):
         except Exception as ex:
           # permission denied here is expected when ambari runs as non-root
           print_info_msg("Could not create {0}. Reason: {1}".format(directory, ex))
-      
+
       if not os.path.isdir(directory) or not os.access(directory, os.W_OK):
         raise FatalException(-1, "Unable to access {0} directory. Confirm the directory is created and is writable by Ambari Server user account '{1}'".format(directory, getpass.getuser()))
 
@@ -1133,6 +1143,35 @@ def update_ambari_env():
 
   return 0
 
+def set_property(key, value, rewrite=True):
+  properties = get_ambari_properties()
+  if properties == -1:
+    err = "Error getting ambari properties"
+    raise FatalException(-1, err)
+
+  if not rewrite and key in properties.keys():
+    return
+
+  properties.process_pair(key, value)
+  update_properties(properties)
+
+
+# default should be false / not accepted
+def write_gpl_license_accepted(default_prompt_value = False, text = GPL_LICENSE_PROMPT_TEXT):
+  properties = get_ambari_properties()
+  if properties == -1:
+    err = "Error getting ambari properties"
+    raise FatalException(-1, err)
+
+
+  if GPL_LICENSE_ACCEPTED_PROPERTY in properties.keys() and properties.get_property(GPL_LICENSE_ACCEPTED_PROPERTY).lower() == "true":
+    return True
+
+  result = get_YN_input(text, default_prompt_value)
+  set_property(GPL_LICENSE_ACCEPTED_PROPERTY, str(result).lower())
+
+  return result
+
 def update_ambari_properties():
   prev_conf_file = search_file(configDefaults.AMBARI_PROPERTIES_BACKUP_FILE, get_conf_dir())
   conf_file = search_file(AMBARI_PROPERTIES_FILE, get_conf_dir())
@@ -1161,6 +1200,7 @@ def update_ambari_properties():
       new_properties.load(hfNew)
 
     for prop_key, prop_value in old_properties.getPropertyDict().items():
+      prop_value = prop_value.replace("/usr/lib/python2.6/site-packages", "/usr/lib/ambari-server/lib")
       if "agent.fqdn.service.url" == prop_key:
         # what is agent.fqdn property in ambari.props?
         new_properties.process_pair(GET_FQDN_SERVICE_URL, prop_value)

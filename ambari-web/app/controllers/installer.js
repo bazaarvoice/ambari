@@ -83,7 +83,9 @@ App.InstallerController = App.WizardController.extend(App.UserPref, {
     'recommendations',
     'recommendationsHostGroups',
     'recommendationsConfigs',
-    'componentsFromConfigs'
+    'componentsFromConfigs',
+    'operatingSystems',
+    'repositories'
   ],
 
   init: function () {
@@ -124,14 +126,6 @@ App.InstallerController = App.WizardController.extend(App.UserPref, {
       delete dbHosts[host];
     });
     this.setDBProperty('hosts', dbHosts);
-  },
-
-  /**
-   * Load confirmed hosts.
-   * Will be used at <code>Assign Masters(step5)</code> step
-   */
-  loadConfirmedHosts: function () {
-    this.set('content.hosts', this.getDBProperty('hosts') || {});
   },
 
   /**
@@ -229,7 +223,13 @@ App.InstallerController = App.WizardController.extend(App.UserPref, {
     var stacks = this.get('content.stacks');
     var dfd = $.Deferred();
     if (stacks && stacks.get('length')) {
-      App.set('currentStackVersion', App.Stack.find().findProperty('isSelected').get('stackNameVersion'));
+      var selectedStack = App.Stack.find().findProperty('isSelected');
+      App.set('currentStackVersion', selectedStack.get('stackNameVersion'));
+      var version = selectedStack.get('repositoryVersion');
+      if (version.indexOf('-') != -1) {
+        version = version.split('-')[0];
+      }
+      App.set('fullStackVersion', version);
       dfd.resolve(true);
     } else {
       App.ajax.send({
@@ -295,7 +295,7 @@ App.InstallerController = App.WizardController.extend(App.UserPref, {
     var isStacksExistInDb = stacks && stacks.length;
     if (isStacksExistInDb) {
       stacks.forEach(function (_stack) {
-        var stack = data.items.findProperty('VersionDefinition.repository_version', _stack.repository_version);
+        var stack = data.items.findProperty('VersionDefinition.id', _stack.id);
         if (stack) {
           stack.VersionDefinition.is_selected = _stack.is_selected;
         }
@@ -321,7 +321,9 @@ App.InstallerController = App.WizardController.extend(App.UserPref, {
       App.Repository.find().findProperty('id', repo.id).set('baseUrl', repo.base_url);
     });
     _oses.forEach(function (os) {
-      App.OperatingSystem.find().findProperty('id', os.id).set('isSelected', os.is_selected);
+      if (App.OperatingSystem.find().findProperty('id', os.id)) {
+        App.OperatingSystem.find().findProperty('id', os.id).set('isSelected', os.is_selected);
+      }
     });
     //should delete the record on going to step 2, on going back to step 1, still need the record
     if (App.router.get('currentState.name') != "step1") {
@@ -344,7 +346,13 @@ App.InstallerController = App.WizardController.extend(App.UserPref, {
       stacks.sortProperty('id').set('lastObject.isSelected', true);
     }
     this.set('content.stacks', App.Stack.find());
-    App.set('currentStackVersion', App.Stack.find().findProperty('isSelected').get('stackNameVersion'));
+    var selectedStack = App.Stack.find().findProperty('isSelected');
+    App.set('currentStackVersion', selectedStack.get('stackNameVersion'));
+    var version = selectedStack.get('repositoryVersion');
+    if (version.indexOf('-') != -1) {
+      version = version.split('-')[0];
+    }
+    App.set('fullStackVersion', version);
   },
 
   /**
@@ -703,18 +711,33 @@ App.InstallerController = App.WizardController.extend(App.UserPref, {
       if(!existedMap[supportedOS.OperatingSystems.os_type]) {
         supportedOS.isSelected = false;
         existedOS.push(supportedOS);
-      } else if (stack_default) { // only overwrite if it is stack default, otherwise use url from /version_definition
-        existedMap[supportedOS.OperatingSystems.os_type].repositories.forEach(function (repo) {
-          supportedOS.repositories.forEach(function (supportedRepo) {
-            if (supportedRepo.Repositories.repo_id == repo.Repositories.repo_id) {
-              repo.Repositories.base_url = supportedRepo.Repositories.base_url;
-              repo.Repositories.default_base_url = supportedRepo.Repositories.default_base_url;
-              repo.Repositories.latest_base_url = supportedRepo.Repositories.latest_base_url;
-            }
+      } else {
+        if (stack_default) { // only overwrite if it is stack default, otherwise use url from /version_definition
+          existedMap[supportedOS.OperatingSystems.os_type].repositories.forEach(function (repo) {
+            supportedOS.repositories.forEach(function (supportedRepo) {
+              if (supportedRepo.Repositories.repo_id == repo.Repositories.repo_id) {
+                repo.Repositories.base_url = supportedRepo.Repositories.base_url;
+                repo.Repositories.default_base_url = supportedRepo.Repositories.default_base_url;
+                repo.Repositories.latest_base_url = supportedRepo.Repositories.latest_base_url;
+                repo.Repositories.components = supportedRepo.Repositories.components;
+                repo.Repositories.distribution = supportedRepo.Repositories.distribution;
+              }
+            });
           });
-        });
+        }
+        else{
+          existedMap[supportedOS.OperatingSystems.os_type].repositories.forEach(function (repo) {
+            supportedOS.repositories.forEach(function (supportedRepo) {
+              if (supportedRepo.Repositories.repo_id == repo.Repositories.repo_id) {
+                repo.Repositories.components = supportedRepo.Repositories.components;
+                repo.Repositories.distribution = supportedRepo.Repositories.distribution;
+              }
+            });
+          });
+        }
       }
     });
+
     App.stackMapper.map(data.versionDefinition);
 
     if (!this.decrementProperty('loadStacksRequestsCounter')) {
@@ -796,7 +819,10 @@ App.InstallerController = App.WizardController.extend(App.UserPref, {
           "Repositories": {
             "base_url": repository.get('baseUrl'),
             "repo_id": repository.get('repoId'),
-            "repo_name": repository.get('repoName')
+            "repo_name": repository.get('repoName'),
+            "components": repository.get('components'),
+            "tags": repository.get('tags'),
+            "distribution": repository.get('distribution')
           }
         });
       });
@@ -816,7 +842,7 @@ App.InstallerController = App.WizardController.extend(App.UserPref, {
     var dfd = $.Deferred();
     if (selectedStack && selectedStack.get('operatingSystems')) {
       this.set('validationCnt', selectedStack.get('operatingSystems').filterProperty('isSelected').filterProperty('isEmpty', false).map(function (os) {
-        return os.get('repositories.length');
+        return os.get('repositories').filterProperty('showRepo', true).length;
       }).reduce(Em.sum, 0));
       var verifyBaseUrl = !wizardStep1Controller.get('skipValidationChecked') && !wizardStep1Controller.get('selectedStack.useRedhatSatellite');
       if (!verifyBaseUrl) {
@@ -825,32 +851,35 @@ App.InstallerController = App.WizardController.extend(App.UserPref, {
       selectedStack.get('operatingSystems').forEach(function (os) {
         if (os.get('isSelected') && !os.get('isEmpty')) {
           os.get('repositories').forEach(function (repo) {
-            repo.setProperties({
-              errorTitle: '',
-              errorContent: '',
-              validation: App.Repository.validation.INPROGRESS
-            });
-            this.set('content.isCheckInProgress', true);
-            App.ajax.send({
-              name: 'wizard.advanced_repositories.valid_url',
-              sender: this,
-              data: {
-                stackName: stackName,
-                stackVersion: stackVersion,
-                repoId: repo.get('repoId'),
-                osType: os.get('osType'),
-                osId: os.get('id'),
-                dfd: dfd,
+            if (repo.get('showRepo')) {
+              repo.setProperties({
+                errorTitle: '',
+                errorContent: '',
+                validation: App.Repository.validation.INPROGRESS
+              });
+              this.set('content.isCheckInProgress', true);
+              App.ajax.send({
+                name: 'wizard.advanced_repositories.valid_url',
+                sender: this,
                 data: {
-                  'Repositories': {
-                    'base_url': repo.get('baseUrl'),
-                    "verify_base_url": verifyBaseUrl
+                  stackName: stackName,
+                  stackVersion: stackVersion,
+                  repoId: repo.get('repoId'),
+                  osType: os.get('osType'),
+                  osId: os.get('id'),
+                  dfd: dfd,
+                  data: {
+                    'Repositories': {
+                      'base_url': repo.get('baseUrl'),
+                      'repo_name': repo.get('repoName'),
+                      "verify_base_url": verifyBaseUrl
+                    }
                   }
-                }
-              },
-              success: 'checkRepoURLSuccessCallback',
-              error: 'checkRepoURLErrorCallback'
-            });
+                },
+                success: 'checkRepoURLSuccessCallback',
+                error: 'checkRepoURLErrorCallback'
+              });
+            }
           }, this);
         } else if (os.get('isSelected') && os.get('isEmpty')) {
           os.set('isSelected', false);

@@ -23,7 +23,6 @@ import oozie_server_upgrade
 from resource_management.core import Logger
 from resource_management.core.resources.system import Execute
 from resource_management.libraries.functions import format
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from resource_management.libraries.functions.constants import Direction
 from resource_management.libraries.script import Script
@@ -42,9 +41,6 @@ from oozie_service import oozie_service
 
 class OozieServer(Script):
 
-  def get_component_name(self):
-    return "oozie-server"
-
   def install(self, env):
     self.install_packages(env)
 
@@ -55,15 +51,13 @@ class OozieServer(Script):
     #TODO: needed?
     if upgrade_type == "nonrolling" and params.upgrade_direction == Direction.UPGRADE and \
             params.version and compare_versions(format_stack_version(params.version), '4.1.0.0') >= 0:
-      conf_select.select(params.stack_name, "oozie", params.version)
       # In order for the "/usr/hdp/current/oozie-<client/server>" point to the new version of
       # oozie, we need to create the symlinks both for server and client.
       # This is required as both need to be pointing to new installed oozie version.
 
       # Sets the symlink : eg: /usr/hdp/current/oozie-client -> /usr/hdp/2.3.x.y-<version>/oozie
-      stack_select.select("oozie-client", params.version)
       # Sets the symlink : eg: /usr/hdp/current/oozie-server -> /usr/hdp/2.3.x.y-<version>/oozie
-      stack_select.select("oozie-server", params.version)
+      stack_select.select_packages(params.version)
 
     env.set_params(params)
     oozie(is_server=True)
@@ -180,8 +174,7 @@ class OozieServer(Script):
 
     oozie_server_upgrade.backup_configuration()
 
-    conf_select.select(params.stack_name, "oozie", params.version)
-    stack_select.select("oozie-server", params.version)
+    stack_select.select_packages(params.version)
     #Execute(format("stack-select set oozie-server {version}"))
 
     oozie_server_upgrade.restore_configuration()

@@ -28,7 +28,8 @@
   <modelVersion>4.0.0</modelVersion>
   <properties>
     <mapping.base.path>/usr/lib</mapping.base.path>
-    <solr.tar>http://archive.apache.org/dist/lucene/solr/${solr.version}/solr-${solr.version}.tgz</solr.tar>
+    <!-- original apache repo location: http://archive.apache.org/dist/lucene/solr/${solr.version}/solr-${solr.version}.tgz -->
+    <solr.tar>http://public-repo-1.hortonworks.com/ARTIFACTS/dist/lucene/solr/${solr.version}/solr-${solr.version}.tgz</solr.tar>
     <solr.mapping.path>${mapping.base.path}/ambari-infra-solr</solr.mapping.path>
     <solr.package.name>ambari-infra-solr</solr.package.name>
     <solr.client.package.name>ambari-infra-solr-client</solr.client.package.name>
@@ -44,6 +45,11 @@
     <logsearch.logfeeder.conf.mapping.path>/etc/${logsearch.logfeeder.package.name}/conf
     </logsearch.logfeeder.conf.mapping.path>
     <infra.solr.plugin.dir>${project.basedir}/../ambari-infra-solr-plugin</infra.solr.plugin.dir>
+    <common-fileupload.location.url>http://central.maven.org/maven2/commons-fileupload/commons-fileupload/1.3.3/commons-fileupload-1.3.3.jar</common-fileupload.location.url>
+    <common-fileupload.jar.name>commons-fileupload-1.3.3.jar</common-fileupload.jar.name>
+    <common-fileupload.old.jar.name>commons-fileupload-1.3.2.jar</common-fileupload.old.jar.name>
+    <zookeeper.jar.name>zookeeper-3.4.7.jar</zookeeper.jar.name>
+    <zookeeper.jar.location>http://central.maven.org/maven2/org/apache/zookeeper/zookeeper/3.4.7/${zookeeper.jar.name}</zookeeper.jar.location>
   </properties>
   <artifactId>ambari-logsearch-assembly</artifactId>
   <profiles>
@@ -112,12 +118,19 @@
                   <name>${solr.client.package.name}</name>
                   <needarch>noarch</needarch>
                   <targetOS>linux</targetOS>
+                  <postinstallScriptlet>
+                     <scriptFile>${project.basedir}/src/main/package/rpm/solr-client/postinstall.sh</scriptFile>
+                     <fileEncoding>utf-8</fileEncoding>
+                   </postinstallScriptlet>
                   <mappings>
                     <mapping>
                       <directory>${solr.client.mapping.path}</directory>
                       <sources>
                         <source>
                           <location>${solr.client.dir}/target/package</location>
+                          <excludes>
+                            <exclude>libs/checkstyle*.jar</exclude>
+                          </excludes>
                         </source>
                       </sources>
                     </mapping>
@@ -145,6 +158,7 @@
                             <exclude>classes/user_pass.json</exclude>
                             <exclude>classes/HadoopServiceConfig.json</exclude>
                             <exclude>solr_configsets/**</exclude>
+                            <exclude>libs/checkstyle*.jar</exclude>
                           </excludes>
                         </source>
                       </sources>
@@ -240,6 +254,17 @@
                     <move todir="${project.build.directory}/solr">
                       <fileset dir="${project.build.directory}/solr-${solr.version}"/>
                     </move>
+
+                    <delete file="${project.build.directory}/solr/server/solr-webapp/webapp/WEB-INF/lib/${common-fileupload.old.jar.name}"/>
+                    <get src="${common-fileupload.location.url}" dest="target/${common-fileupload.jar.name}" usetimestamp="true"/>
+                    <move file="target/${common-fileupload.jar.name}"
+                          toDir="${project.build.directory}/solr/server/solr-webapp/webapp/WEB-INF/lib/"/>
+
+                    <delete file="${project.build.directory}/solr/server/solr-webapp/webapp/WEB-INF/lib/zookeeper-3.4.6.jar"/>
+                    <get src="${zookeeper.jar.location}" dest="target/${zookeeper.jar.name}" usetimestamp="true"/>
+                    <move file="target/${zookeeper.jar.name}"
+                          toDir="${project.build.directory}/solr/server/solr-webapp/webapp/WEB-INF/lib/"/>
+
                     <copy file="${project.basedir}/src/main/resources/solr" toDir="${project.build.directory}/solr/bin/" />
                     <copy file="${infra.solr.plugin.dir}/target/ambari-infra-solr-plugin-${project.version}.jar"
                           toDir="${project.build.directory}/solr/server/solr-webapp/webapp/WEB-INF/lib/"/>
@@ -372,6 +397,7 @@
                         <group>root</group>
                         <prefix>${solr.client.mapping.path}</prefix>
                       </mapper>
+                      <excludes>libs/checkstyle*.jar</excludes>
                     </data>
                   </dataSet>
                 </configuration>
@@ -400,7 +426,7 @@
                         <group>root</group>
                       </mapper>
                       <excludes>
-                        classes/log4j.xml,classes/logsearch.properties,classes/user_pass.json,classes/HadoopServiceConfig.json,solr_configsets/**
+                        classes/log4j.xml,classes/logsearch.properties,classes/user_pass.json,classes/HadoopServiceConfig.json,solr_configsets/**,libs/checkstyle*.jar
                       </excludes>
                     </data>
                     <data>
@@ -501,6 +527,17 @@
                     <move todir="${project.build.directory}/solr">
                       <fileset dir="${project.build.directory}/solr-${solr.version}"/>
                     </move>
+
+                    <delete file="${project.build.directory}/solr/server/solr-webapp/webapp/WEB-INF/lib/${common-fileupload.old.jar.name}"/>
+                    <get src="${common-fileupload.location.url}" dest="target/${common-fileupload.jar.name}" usetimestamp="true"/>
+                    <move file="target/${common-fileupload.jar.name}"
+                          toDir="${project.build.directory}/solr/server/solr-webapp/webapp/WEB-INF/lib/"/>
+
+                    <delete file="${project.build.directory}/solr/server/solr-webapp/webapp/WEB-INF/lib/zookeeper-3.4.6.jar"/>
+                    <get src="${zookeeper.jar.location}" dest="target/${zookeeper.jar.name}" usetimestamp="true"/>
+                    <move file="target/${zookeeper.jar.name}"
+                          toDir="${project.build.directory}/solr/server/solr-webapp/webapp/WEB-INF/lib/"/>
+
                     <copy file="${project.basedir}/src/main/resources/solr" toDir="${project.build.directory}/solr/bin/" />
                     <copy file="${infra.solr.plugin.dir}/target/ambari-infra-solr-plugin-${project.version}.jar"
                           toDir="${project.build.directory}/solr/server/solr-webapp/webapp/WEB-INF/lib/"/>

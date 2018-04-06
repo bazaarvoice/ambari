@@ -37,7 +37,7 @@ from ambari_server.dbConfiguration import DATABASE_NAMES, LINUX_DBMS_KEYS_LIST
 from ambari_server.serverConfiguration import configDefaults, get_ambari_properties, PID_NAME
 from ambari_server.serverUtils import is_server_runing, refresh_stack_hash, wait_for_server_to_stop
 from ambari_server.serverSetup import reset, setup, setup_jce_policy
-from ambari_server.serverUpgrade import upgrade, upgrade_stack, set_current
+from ambari_server.serverUpgrade import upgrade, set_current
 from ambari_server.setupHttps import setup_https, setup_truststore
 from ambari_server.setupMpacks import install_mpack, uninstall_mpack, upgrade_mpack, STACK_DEFINITIONS_RESOURCE_NAME, \
   SERVICE_DEFINITIONS_RESOURCE_NAME, MPACKS_RESOURCE_NAME
@@ -49,9 +49,9 @@ from ambari_server.enableStack import enable_stack_version
 
 from ambari_server.setupActions import BACKUP_ACTION, LDAP_SETUP_ACTION, LDAP_SYNC_ACTION, PSTART_ACTION, \
   REFRESH_STACK_HASH_ACTION, RESET_ACTION, RESTORE_ACTION, UPDATE_HOST_NAMES_ACTION, CHECK_DATABASE_ACTION, \
-  SETUP_ACTION, SETUP_SECURITY_ACTION,START_ACTION, STATUS_ACTION, STOP_ACTION, RESTART_ACTION, UPGRADE_ACTION, \
-  UPGRADE_STACK_ACTION, SETUP_JCE_ACTION, SET_CURRENT_ACTION, START_ACTION, STATUS_ACTION, STOP_ACTION, UPGRADE_ACTION, \
-  UPGRADE_STACK_ACTION, SETUP_JCE_ACTION, SET_CURRENT_ACTION, ENABLE_STACK_ACTION, SETUP_SSO_ACTION, \
+  SETUP_ACTION, SETUP_SECURITY_ACTION, START_ACTION, STATUS_ACTION, STOP_ACTION, RESTART_ACTION, UPGRADE_ACTION, \
+  SETUP_JCE_ACTION, SET_CURRENT_ACTION, START_ACTION, STATUS_ACTION, STOP_ACTION, UPGRADE_ACTION, \
+  SETUP_JCE_ACTION, SET_CURRENT_ACTION, ENABLE_STACK_ACTION, SETUP_SSO_ACTION, \
   DB_PURGE_ACTION, INSTALL_MPACK_ACTION, UNINSTALL_MPACK_ACTION, UPGRADE_MPACK_ACTION, PAM_SETUP_ACTION, MIGRATE_LDAP_PAM_ACTION, KERBEROS_SETUP_ACTION
 from ambari_server.setupSecurity import setup_ldap, sync_ldap, setup_master_key, setup_ambari_krb5_jaas, setup_pam, migrate_ldap_pam
 from ambari_server.userInput import get_validated_string_input
@@ -409,6 +409,7 @@ def init_parser_options(parser):
   parser.add_option('--skip-database-check', action="store_true", default=False, help="Skip database consistency check", dest="skip_database_check")
   parser.add_option('--skip-view-extraction', action="store_true", default=False, help="Skip extraction of system views", dest="skip_view_extraction")
   parser.add_option('--auto-fix-database', action="store_true", default=False, help="Automatically fix database consistency issues", dest="fix_database_consistency")
+  parser.add_option('--enable-lzo-under-gpl-license', action="store_true", default=False, help="Automatically accepts GPL license", dest="accept_gpl")
   add_parser_options('--mpack',
       default=None,
       help="Specify the path for management pack to be installed/upgraded",
@@ -512,6 +513,7 @@ def init_parser_options(parser):
   parser.add_option('--skip-database-check', action="store_true", default=False, help="Skip database consistency check", dest="skip_database_check")
   parser.add_option('--skip-view-extraction', action="store_true", default=False, help="Skip extraction of system views", dest="skip_view_extraction")
   parser.add_option('--auto-fix-database', action="store_true", default=False, help="Automatically fix database consistency issues", dest="fix_database_consistency")
+  parser.add_option('--enable-lzo-under-gpl-license', action="store_true", default=False, help="Automatically accepts GPL license", dest="accept_gpl")
   parser.add_option('--force-version', action="store_true", default=False, help="Force version to current", dest="force_repo_version")
   parser.add_option('--version', dest="stack_versions", default=None, action="append", type="string",
                     help="Specify stack version that needs to be enabled. All other stacks versions will be disabled")
@@ -753,7 +755,6 @@ def create_user_action_map(args, options):
         RESET_ACTION: UserAction(reset, options),
         STATUS_ACTION: UserAction(status, options),
         UPGRADE_ACTION: UserAction(upgrade, options),
-        UPGRADE_STACK_ACTION: UserActionPossibleArgs(upgrade_stack, [2, 4], args),
         LDAP_SETUP_ACTION: UserAction(setup_ldap, options),
         LDAP_SYNC_ACTION: UserAction(sync_ldap, options),
         SET_CURRENT_ACTION: UserAction(set_current, options),

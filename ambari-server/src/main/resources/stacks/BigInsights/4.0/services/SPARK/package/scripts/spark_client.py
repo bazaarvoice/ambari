@@ -20,7 +20,6 @@ limitations under the License.
 
 import sys
 from resource_management import *
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 #from resource_management.libraries.functions.version import compare_versions, format_stack_version
 from resource_management.core.exceptions import ComponentIsNotRunning
@@ -31,16 +30,12 @@ from spark import spark
 
 class SparkClient(Script):
 
-  def get_component_name(self):
-    return "spark-client"
-
   def pre_upgrade_restart(self, env, upgrade_type=None):
     import params
 
     env.set_params(params)
     if params.version and compare_versions(format_stack_version(params.version), '4.0.0.0') >= 0:
-      conf_select.select(params.stack_name, "spark", params.version)
-      stack_select.select("spark-client", params.version)
+      stack_select.select_packages(params.version)
       #Execute(format("stack-select set spark-client {version}"))
 
   def install(self, env):

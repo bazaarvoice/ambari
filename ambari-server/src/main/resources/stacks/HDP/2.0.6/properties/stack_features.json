@@ -104,12 +104,6 @@
         "min_version": "2.2.0.0"
       },
       {
-        "name": "create_kafka_broker_id",
-        "description": "Ambari should create Kafka Broker Id (AMBARI-12678)",
-        "min_version": "2.2.0.0",
-        "max_version": "2.3.0.0"
-      },
-      {
         "name": "kafka_listeners",
         "description": "Kafka listeners (AMBARI-10984)",
         "min_version": "2.3.0.0"
@@ -433,6 +427,27 @@
         "name": "hadoop_custom_extensions",
         "description": "Support hadoop custom extensions",
         "min_version": "2.6.0.0"
+      },
+      {
+        "name": "registry_remove_rootpath",
+        "description": "Registry remove root path setting",
+        "min_version": "2.6.3.0"
+      },
+      {
+        "name": "kafka_extended_sasl_support",
+        "description": "Support SASL PLAIN and GSSAPI",
+        "min_version": "2.6.99.99"
+      },
+      {
+        "name": "oozie_extjs_included",
+        "description": "ExtJS is included in the repository and automatically installed by Ambari",
+        "min_version": "2.2.0.0",
+        "max_version": "2.6.0.0"
+      },
+      {
+        "name": "nifi_encrypted_authorizers_config",
+        "description": "Support encrypted authorizers.xml configuration for version 3.1 onwards",
+        "min_version": "2.6.5.0"
       }
     ]
   }

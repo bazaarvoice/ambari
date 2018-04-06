@@ -149,7 +149,7 @@ App.ConfigsSaverMixin = Em.Mixin.create({
 
           var overriddenConfigs = this.getConfigsForGroup(configs, configGroup.get('name'));
 
-          if (Em.isArray(overriddenConfigs) && this.isOverriddenConfigsModified(overriddenConfigs)) {
+          if (Em.isArray(overriddenConfigs) && this.isOverriddenConfigsModified(overriddenConfigs, configGroup)) {
             var successCallback = this.get('content.serviceName') === serviceName ? 'putConfigGroupChangesSuccess' : null;
             this.saveGroup(overriddenConfigs, configGroup, this.get('serviceConfigVersionNote'), successCallback);
           }
@@ -162,10 +162,14 @@ App.ConfigsSaverMixin = Em.Mixin.create({
    * @param {Array} overriddenConfigs
    * @returns {boolean}
    */
-  isOverriddenConfigsModified: function(overriddenConfigs) {
-    return overriddenConfigs.some(function(config) {
-      return config.get('savedValue') !== config.get('value');
+  isOverriddenConfigsModified: function(overriddenConfigs, group) {
+    var hasChangedConfigs = overriddenConfigs.some(function(config) {
+      return config.get('savedValue') !== config.get('value') || config.get('savedIsFinal') !== config.get('isFinal');
     });
+    var overriddenConfigsNames = overriddenConfigs.mapProperty('name');
+    return hasChangedConfigs || group.get('properties').some(function (property) {
+        return !overriddenConfigsNames.contains(Em.get(property, 'name'));
+      });
   },
 
   /*********************************** 0. HELPERS ********************************************/
@@ -324,9 +328,9 @@ App.ConfigsSaverMixin = Em.Mixin.create({
       return App.config.getOriginalFileName(type);
     });
 
-    // save modified original configs that have no group
+    // save modified original configs that have no group and are not Undefined label
     modifiedConfigs = this.saveSiteConfigs(modifiedConfigs.filter(function (config) {
-      return !config.get('group');
+      return !config.get('group') && !config.get('isUndefinedLabel');
     }));
 
     if (!Em.isArray(modifiedConfigs) || modifiedConfigs.length == 0) return null;
@@ -570,6 +574,7 @@ App.ConfigsSaverMixin = Em.Mixin.create({
         "cluster_name": App.get('clusterName') || this.get('clusterName'),
         "group_name": group.name,
         "tag": group.service_id,
+        "service_name": group.service_id,
         "description": group.description,
         "hosts": groupHosts,
         "service_config_version_note": configVersionNote || "",

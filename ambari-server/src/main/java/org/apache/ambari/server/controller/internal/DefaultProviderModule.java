@@ -66,8 +66,6 @@ public class DefaultProviderModule extends AbstractProviderModule {
         return new ViewResourceProvider();
       case ViewVersion:
         return new ViewVersionResourceProvider();
-      case ViewInstance:
-        return new ViewInstanceResourceProvider();
       case ViewURL:
         return new ViewURLResourceProvider();
       case StackServiceComponentDependency:
@@ -94,8 +92,6 @@ public class DefaultProviderModule extends AbstractProviderModule {
         return new AlertDefinitionResourceProvider(managementController);
       case AlertHistory:
         return new AlertHistoryResourceProvider(managementController);
-      case AlertTarget:
-        return new AlertTargetResourceProvider();
       case AlertGroup:
         return new AlertGroupResourceProvider(managementController);
       case AlertNotice:
@@ -106,8 +102,6 @@ public class DefaultProviderModule extends AbstractProviderModule {
         return new UpgradeItemResourceProvider(managementController);
       case UpgradeSummary:
         return new UpgradeSummaryResourceProvider(managementController);
-      case ClusterStackVersion:
-        return new ClusterStackVersionResourceProvider(managementController);
       case PreUpgradeCheck:
         return new PreUpgradeCheckResourceProvider(managementController);
       case HostStackVersion:

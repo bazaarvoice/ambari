@@ -65,7 +65,6 @@ class StackFeature:
   SPARK_LIVY2 = "spark_livy2"
   STORM_KERBEROS = "storm_kerberos"
   STORM_AMS = "storm_ams"
-  CREATE_KAFKA_BROKER_ID = "create_kafka_broker_id"
   KAFKA_LISTENERS = "kafka_listeners"
   KAFKA_KERBEROS = "kafka_kerberos"
   PIG_ON_TEZ = "pig_on_tez"
@@ -112,12 +111,14 @@ class StackFeature:
   KAFKA_RANGER_PLUGIN_SUPPORT = "kafka_ranger_plugin_support"
   YARN_RANGER_PLUGIN_SUPPORT = "yarn_ranger_plugin_support"
   RANGER_SOLR_CONFIG_SUPPORT='ranger_solr_config_support'
-  HIVE_INTERACTIVE_ATLAS_HOOK_REQUIRED="hive_interactive_atlas_hook_required"
-  CORE_SITE_FOR_RANGER_PLUGINS_SUPPORT='core_site_for_ranger_plugins'
-  ATLAS_INSTALL_HOOK_PACKAGE_SUPPORT="atlas_install_hook_package_support"
-  ATLAS_HDFS_SITE_ON_NAMENODE_HA='atlas_hdfs_site_on_namenode_ha'
-  HIVE_INTERACTIVE_GA_SUPPORT='hive_interactive_ga'
+  HIVE_INTERACTIVE_ATLAS_HOOK_REQUIRED = "hive_interactive_atlas_hook_required"
+  CORE_SITE_FOR_RANGER_PLUGINS_SUPPORT = 'core_site_for_ranger_plugins'
+  ATLAS_INSTALL_HOOK_PACKAGE_SUPPORT = "atlas_install_hook_package_support"
+  ATLAS_HDFS_SITE_ON_NAMENODE_HA = 'atlas_hdfs_site_on_namenode_ha'
+  HIVE_INTERACTIVE_GA_SUPPORT = 'hive_interactive_ga'
   SECURE_RANGER_SSL_PASSWORD = "secure_ranger_ssl_password"
   RANGER_KMS_SSL = "ranger_kms_ssl"
   KAFKA_ACL_MIGRATION_SUPPORT = "kafka_acl_migration_support"
   ATLAS_CORE_SITE_SUPPORT="atlas_core_site_support"
+  KAFKA_EXTENDED_SASL_SUPPORT = "kafka_extended_sasl_support"
+  OOZIE_EXTJS_INCLUDED = "oozie_extjs_included"

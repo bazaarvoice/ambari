@@ -36,6 +36,7 @@ from resource_management.libraries.functions import get_kinit_path
 from resource_management.libraries.script.script import Script
 from resource_management.libraries.functions import stack_select
 from resource_management.libraries.functions import StackFeature
+from resource_management.libraries.functions import upgrade_summary
 from resource_management.libraries.functions.stack_features import check_stack_feature
 from resource_management.libraries.functions.stack_features import get_stack_feature_version
 from resource_management.libraries.functions.get_port_from_url import get_port_from_url
@@ -63,15 +64,12 @@ iop_stack_version = functions.get_stack_version('hive-server2')
 # It cannot be used during the initial Cluser Install because the version is not yet known.
 version = default("/commandParams/version", None)
 
-# current host stack version
-current_version = default("/hostLevelParams/current_version", None)
+# When downgrading the 'version' is pointing to the downgrade-target version
+# downgrade_from_version provides the source-version the downgrade is happening from
+downgrade_from_version = upgrade_summary.get_downgrade_from_version("HIVE")
 
 # get the correct version to use for checking stack features
 version_for_stack_feature_checks = get_stack_feature_version(config)
-
-# When downgrading the 'version' and 'current_version' are both pointing to the downgrade-target version
-# downgrade_from_version provides the source-version the downgrade is happening from 
-downgrade_from_version = default("/commandParams/downgrade_from_version", None)
 
 # Upgrade direction
 upgrade_direction = default("/commandParams/upgrade_direction", None)
@@ -80,8 +78,6 @@ stack_supports_ranger_audit_db = check_stack_feature(StackFeature.RANGER_AUDIT_D
 component_directory = status_params.component_directory
 hadoop_bin_dir = "/usr/bin"
 hadoop_home = '/usr'
-hive_bin = '/usr/lib/hive/bin'
-hive_lib = '/usr/lib/hive/lib'
 
 #Hbase params keep hbase lib here,if not,mapreduce job doesn't work for hive.
 hbase_lib = '/usr/iop/current/hbase-client/lib'
@@ -105,6 +101,7 @@ if command_role in server_role_dir_mapping:
   hive_bin = format('/usr/iop/current/{hive_server_root}/bin')
   hive_lib = format('/usr/iop/current/{hive_server_root}/lib')
 
+hive_cmd = os.path.join(hive_bin, "hive")
 hive_specific_configs_supported = False
 hive_etc_dir_prefix = "/etc/hive"
 limits_conf_dir = "/etc/security/limits.d"
@@ -140,8 +137,6 @@ if Script.is_stack_greater_or_equal("4.1.0.0"):
 
 component_directory = status_params.component_directory
 hadoop_home = '/usr/iop/current/hadoop-client'
-hive_bin = format('/usr/iop/current/{component_directory}/bin')
-hive_lib = format('/usr/iop/current/{component_directory}/lib')
 
 # there are no client versions of these, use server versions directly
 hcat_lib = '/usr/iop/current/hive-webhcat/share/hcatalog'
@@ -314,7 +309,8 @@ if upgrade_direction:
 # normally, the JDBC driver would be referenced by /usr/hdp/current/.../foo.jar
 # but in RU if hdp-select is called and the restart fails, then this means that current pointer
 # is now pointing to the upgraded version location; that's bad for the cp command
-source_jdbc_file = format("/usr/iop/{current_version}/hive/lib/{jdbc_jar_name}")
+version_for_source_jdbc_file = upgrade_summary.get_source_version(default_version = version_for_stack_feature_checks)
+source_jdbc_file = format("/usr/iop/{version_for_source_jdbc_file}/hive/lib/{jdbc_jar_name}")
 
 jdk_location = config['hostLevelParams']['jdk_location']
 driver_curl_source = format("{jdk_location}/{jdbc_symlink_name}")

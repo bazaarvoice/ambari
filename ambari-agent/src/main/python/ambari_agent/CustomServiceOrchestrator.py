@@ -31,8 +31,8 @@ from PythonExecutor import PythonExecutor
 from PythonReflectiveExecutor import PythonReflectiveExecutor
 from resource_management.libraries.functions.log_process_information import log_process_information
 from resource_management.core.utils import PasswordString
-import subprocess
-import Constants
+from ambari_commons import subprocess32
+from ambari_commons.constants import AGENT_TMP_DIR
 import hostname
 
 
@@ -83,7 +83,7 @@ class CustomServiceOrchestrator():
     self.tmp_dir = config.get('agent', 'prefix')
     self.force_https_protocol = config.get_force_https_protocol_name()
     self.ca_cert_file_path = config.get_ca_cert_file_path()
-    self.exec_tmp_dir = Constants.AGENT_TMP_DIR
+    self.exec_tmp_dir = AGENT_TMP_DIR
     self.file_cache = FileCache(config)
     self.status_commands_stdout = os.path.join(self.tmp_dir,
                                                'status_command_stdout.txt')
@@ -281,7 +281,11 @@ class CustomServiceOrchestrator():
 
     for config_type, credentials in configtype_credentials.items():
       config = commandJson['configurations'][config_type]
-      file_path = os.path.join(self.getProviderDirectory(serviceName), "{0}.jceks".format(config_type))
+      if 'role' in commandJson and commandJson['role']:
+        roleName = commandJson['role']
+        file_path = os.path.join(self.getProviderDirectory(roleName), "{0}.jceks".format(config_type))
+      else:
+        file_path = os.path.join(self.getProviderDirectory(serviceName), "{0}.jceks".format(config_type))
       if os.path.exists(file_path):
         os.remove(file_path)
       provider_path = 'jceks://file{file_path}'.format(file_path=file_path)
@@ -293,7 +297,7 @@ class CustomServiceOrchestrator():
         cmd = (java_bin, '-cp', cs_lib_path, self.credential_shell_cmd, 'create',
                alias, '-value', protected_pwd, '-provider', provider_path)
         logger.info(cmd)
-        cmd_result = subprocess.call(cmd)
+        cmd_result = subprocess32.call(cmd)
         logger.info('cmd_result = {0}'.format(cmd_result))
         os.chmod(file_path, 0644) # group and others should have read access so that the service user can read
       # Add JCEKS provider path instead
@@ -448,7 +452,7 @@ class CustomServiceOrchestrator():
       if self.commands_in_progress.has_key(task_id):#Background command do not push in this collection (TODO)
         logger.debug('Pop with taskId %s' % task_id)
         pid = self.commands_in_progress.pop(task_id)
-        if not isinstance(pid, int):
+        if not isinstance(pid, (int, long)):
           reason = pid
           if reason:
             return "\nCommand aborted. Reason: '{0}'".format(reason)

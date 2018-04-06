@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,17 +22,23 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.ambari.server.AmbariException;
 import org.apache.ambari.server.H2DatabaseCleaner;
-import org.apache.ambari.server.api.services.AmbariMetaInfo;
+import org.apache.ambari.server.ServiceNotFoundException;
 import org.apache.ambari.server.controller.ServiceResponse;
 import org.apache.ambari.server.orm.GuiceJpaInitializer;
 import org.apache.ambari.server.orm.InMemoryDefaultTestModule;
+import org.apache.ambari.server.orm.OrmTestHelper;
 import org.apache.ambari.server.orm.dao.ClusterServiceDAO;
 import org.apache.ambari.server.orm.entities.ClusterServiceEntity;
+import org.apache.ambari.server.orm.entities.RepositoryVersionEntity;
+import org.apache.ambari.server.state.configgroup.ConfigGroup;
+import org.apache.ambari.server.state.configgroup.ConfigGroupFactory;
+import org.apache.commons.collections.MapUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -51,7 +57,14 @@ public class ServiceTest {
   private ServiceFactory serviceFactory;
   private ServiceComponentFactory serviceComponentFactory;
   private ServiceComponentHostFactory serviceComponentHostFactory;
-  private AmbariMetaInfo metaInfo;
+  private OrmTestHelper ormTestHelper;
+  private ConfigGroupFactory configGroupFactory;
+  private ConfigFactory configFactory;
+
+  private final String STACK_VERSION = "0.1";
+  private final String REPO_VERSION = "0.1-1234";
+  private final StackId STACK_ID = new StackId("HDP", STACK_VERSION);
+  private RepositoryVersionEntity repositoryVersion;
 
   @Before
   public void setup() throws Exception {
@@ -59,14 +72,17 @@ public class ServiceTest {
     injector.getInstance(GuiceJpaInitializer.class);
     clusters = injector.getInstance(Clusters.class);
     serviceFactory = injector.getInstance(ServiceFactory.class);
-    serviceComponentFactory = injector.getInstance(
-            ServiceComponentFactory.class);
-    serviceComponentHostFactory = injector.getInstance(
-            ServiceComponentHostFactory.class);
-    metaInfo = injector.getInstance(AmbariMetaInfo.class);
+    serviceComponentFactory = injector.getInstance(ServiceComponentFactory.class);
+    serviceComponentHostFactory = injector.getInstance(ServiceComponentHostFactory.class);
+
+    ormTestHelper = injector.getInstance(OrmTestHelper.class);
+    repositoryVersion = ormTestHelper.getOrCreateRepositoryVersion(STACK_ID, REPO_VERSION);
+
     clusterName = "foo";
-    clusters.addCluster(clusterName, new StackId("HDP-0.1"));
+    clusters.addCluster(clusterName, STACK_ID);
     cluster = clusters.getCluster(clusterName);
+    configGroupFactory = injector.getInstance(ConfigGroupFactory.class);
+    configFactory = injector.getInstance(ConfigFactory.class);
     Assert.assertNotNull(cluster);
   }
 
@@ -77,7 +93,7 @@ public class ServiceTest {
 
   @Test
   public void testCanBeRemoved() throws Exception{
-    Service service = cluster.addService("HDFS");
+    Service service = cluster.addService("HDFS", repositoryVersion);
 
     for (State state : State.values()) {
       service.setDesiredState(state);
@@ -119,15 +135,20 @@ public class ServiceTest {
   @Test
   public void testGetAndSetServiceInfo() throws AmbariException {
     String serviceName = "HDFS";
-    Service s = serviceFactory.createNew(cluster, serviceName);
+    Service s = serviceFactory.createNew(cluster, serviceName, repositoryVersion);
     cluster.addService(s);
 
     Service service = cluster.getService(serviceName);
     Assert.assertNotNull(service);
 
-    service.setDesiredStackVersion(new StackId("HDP-1.2.0"));
-    Assert.assertEquals("HDP-1.2.0",
-        service.getDesiredStackVersion().getStackId());
+    StackId desiredStackId = new StackId("HDP-1.2.0");
+    String desiredVersion = "1.2.0-1234";
+
+    RepositoryVersionEntity desiredRepositoryVersion = ormTestHelper.getOrCreateRepositoryVersion(
+        desiredStackId, desiredVersion);
+
+    service.setDesiredRepositoryVersion(desiredRepositoryVersion);
+    Assert.assertEquals(desiredStackId, service.getDesiredStackId());
 
     service.setDesiredState(State.INSTALLING);
     Assert.assertEquals(State.INSTALLING, service.getDesiredState());
@@ -140,7 +161,7 @@ public class ServiceTest {
   @Test
   public void testAddGetDeleteServiceComponents() throws AmbariException {
     String serviceName = "HDFS";
-    Service s = serviceFactory.createNew(cluster, serviceName);
+    Service s = serviceFactory.createNew(cluster, serviceName, repositoryVersion);
     cluster.addService(s);
 
     Service service = cluster.getService(serviceName);
@@ -154,7 +175,7 @@ public class ServiceTest {
     Assert.assertEquals(State.INIT, service.getDesiredState());
     Assert.assertEquals(SecurityState.UNSECURED, service.getSecurityState());
     Assert.assertFalse(
-            service.getDesiredStackVersion().getStackId().isEmpty());
+            service.getDesiredStackId().getStackId().isEmpty());
 
     Assert.assertTrue(s.getServiceComponents().isEmpty());
 
@@ -166,7 +187,7 @@ public class ServiceTest {
         serviceComponentFactory.createNew(s, "DATANODE2");
 
     Map<String, ServiceComponent> comps = new
-        HashMap<String, ServiceComponent>();
+      HashMap<>();
     comps.put(sc1.getName(), sc1);
     comps.put(sc2.getName(), sc2);
 
@@ -223,30 +244,30 @@ public class ServiceTest {
   @Test
   public void testConvertToResponse() throws AmbariException {
     String serviceName = "HDFS";
-    Service s = serviceFactory.createNew(cluster, serviceName);
+    Service s = serviceFactory.createNew(cluster, serviceName, repositoryVersion);
     cluster.addService(s);
     Service service = cluster.getService(serviceName);
     Assert.assertNotNull(service);
 
     ServiceResponse r = s.convertToResponse();
     Assert.assertEquals(s.getName(), r.getServiceName());
-    Assert.assertEquals(s.getCluster().getClusterName(),
-        r.getClusterName());
-    Assert.assertEquals(s.getDesiredStackVersion().getStackId(),
-        r.getDesiredStackVersion());
-    Assert.assertEquals(s.getDesiredState().toString(),
-        r.getDesiredState());
+    Assert.assertEquals(s.getCluster().getClusterName(), r.getClusterName());
+    Assert.assertEquals(s.getDesiredStackId().getStackId(), r.getDesiredStackId());
+    Assert.assertEquals(s.getDesiredState().toString(), r.getDesiredState());
 
-    service.setDesiredStackVersion(new StackId("HDP-1.2.0"));
+    StackId desiredStackId = new StackId("HDP-1.2.0");
+    String desiredVersion = "1.2.0-1234";
+
+    RepositoryVersionEntity desiredRepositoryVersion = ormTestHelper.getOrCreateRepositoryVersion(
+        desiredStackId, desiredVersion);
+
+    service.setDesiredRepositoryVersion(desiredRepositoryVersion);
     service.setDesiredState(State.INSTALLING);
     r = s.convertToResponse();
     Assert.assertEquals(s.getName(), r.getServiceName());
-    Assert.assertEquals(s.getCluster().getClusterName(),
-        r.getClusterName());
-    Assert.assertEquals(s.getDesiredStackVersion().getStackId(),
-        r.getDesiredStackVersion());
-    Assert.assertEquals(s.getDesiredState().toString(),
-        r.getDesiredState());
+    Assert.assertEquals(s.getCluster().getClusterName(), r.getClusterName());
+    Assert.assertEquals(s.getDesiredStackId().getStackId(), r.getDesiredStackId());
+    Assert.assertEquals(s.getDesiredState().toString(), r.getDesiredState());
     // FIXME add checks for configs
 
     StringBuilder sb = new StringBuilder();
@@ -259,7 +280,7 @@ public class ServiceTest {
   @Test
   public void testServiceMaintenance() throws Exception {
     String serviceName = "HDFS";
-    Service s = serviceFactory.createNew(cluster, serviceName);
+    Service s = serviceFactory.createNew(cluster, serviceName, repositoryVersion);
     cluster.addService(s);
 
     Service service = cluster.getService(serviceName);
@@ -282,7 +303,7 @@ public class ServiceTest {
   @Test
   public void testSecurityState() throws Exception {
     String serviceName = "HDFS";
-    Service s = serviceFactory.createNew(cluster, serviceName);
+    Service s = serviceFactory.createNew(cluster, serviceName, repositoryVersion);
     cluster.addService(s);
 
     Service service = cluster.getService(serviceName);
@@ -319,18 +340,51 @@ public class ServiceTest {
     }
   }
 
-  private void addHostToCluster(String hostname,
+  @Test
+  public void testConfigGroupDeleteWithServiceDelete() throws Exception {
+    String serviceName = "HDFS";
+    Service s = serviceFactory.createNew(cluster, serviceName, repositoryVersion);
+    cluster.addService(s);
+
+    Host h = addHostToCluster("h1", clusterName);
+
+    ConfigGroup cg = configGroupFactory.createNew(cluster, "test1", "HDFS", "HDFS",
+      "Test", Collections.singletonMap("aKey", configFactory.createNew(cluster,
+        "hdfs-site", "versionX", Collections.singletonMap("a", "b"),
+        Collections.<String, Map<String,String>>emptyMap())), Collections.singletonMap(1L, h));
+
+    cluster.addConfigGroup(cg);
+
+    Assert.assertNotNull(cluster.getConfigGroups());
+    Assert.assertEquals(1, cluster.getConfigGroups().size());
+    Assert.assertEquals("test1", cluster.getConfigGroups().values().iterator().next().getName());
+
+    Assert.assertTrue(s.canBeRemoved());
+
+    cluster.deleteService(serviceName);
+
+    Assert.assertTrue(MapUtils.isEmpty(cluster.getConfigGroups()));
+    try {
+      cluster.getService(serviceName);
+      Assert.fail("Service should have been deleted.");
+    } catch (ServiceNotFoundException se) {
+      // expected
+    }
+  }
+
+  private Host addHostToCluster(String hostname,
                                 String clusterName) throws AmbariException {
     clusters.addHost(hostname);
     Host h = clusters.getHost(hostname);
     h.setIPv4(hostname + "ipv4");
     h.setIPv6(hostname + "ipv6");
 
-    Map<String, String> hostAttributes = new HashMap<String, String>();
+    Map<String, String> hostAttributes = new HashMap<>();
     hostAttributes.put("os_family", "redhat");
     hostAttributes.put("os_release_version", "6.3");
     h.setHostAttributes(hostAttributes);
 
     clusters.mapHostToCluster(hostname, clusterName);
+    return h;
   }
 }

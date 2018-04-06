@@ -57,9 +57,11 @@ class TestHiveServerInteractive(RMFTestCase):
       data = json.load(f)
     return data
 
+  @patch("os.path.isfile")
   @patch("resource_management.libraries.functions.copy_tarball.copy_to_hdfs")
-  def test_configure_default(self, copy_to_hdfs_mock):
+  def test_configure_default(self, copy_to_hdfs_mock, is_file_mock):
     self.maxDiff = None
+    is_file_mock.return_value = True
     copy_to_hdfs_mock.return_value = False
     self.executeScript(self.COMMON_SERVICES_PACKAGE_DIR + "/scripts/hive_server_interactive.py",
                        classname="HiveServerInteractive",
@@ -115,8 +117,7 @@ class TestHiveServerInteractive(RMFTestCase):
     )
     self.assertResourceCalled('Execute',
                               '/tmp/start_hiveserver2_interactive_script /var/run/hive/hive-server2-interactive.out /var/log/hive/hive-server2-interactive.err /var/run/hive/hive-interactive.pid /usr/hdp/current/hive-server2-hive2/conf/conf.server /var/log/hive',
-                              environment={'HADOOP_HOME': '/usr/hdp/current/hadoop-client',
-                                           'HIVE_BIN': 'hive2',
+                              environment={'HIVE_BIN': '/usr/hdp/current/hive-server2-hive2/bin/hive2',
                                            'JAVA_HOME': u'/usr/jdk64/jdk1.7.0_45'},
                               not_if="ls /var/run/hive/hive-interactive.pid >/dev/null 2>&1 && ps -p 123 >/dev/null 2>&1",
                               user='hive',
@@ -178,8 +179,7 @@ class TestHiveServerInteractive(RMFTestCase):
     )
     self.assertResourceCalled('Execute',
                               '/tmp/start_hiveserver2_interactive_script /var/run/hive/hive-server2-interactive.out /var/log/hive/hive-server2-interactive.err /var/run/hive/hive-interactive.pid /usr/hdp/current/hive-server2-hive2/conf/conf.server /var/log/hive',
-                              environment={'HADOOP_HOME': '/usr/hdp/current/hadoop-client',
-                                           'HIVE_BIN': 'hive2',
+                              environment={'HIVE_BIN': '/usr/hdp/current/hive-server2-hive2/bin/hive2',
                                            'JAVA_HOME': u'/usr/jdk64/jdk1.7.0_45'},
                               not_if="ls /var/run/hive/hive-interactive.pid >/dev/null 2>&1 && ps -p 123 >/dev/null 2>&1",
                               user='hive',
@@ -227,8 +227,7 @@ class TestHiveServerInteractive(RMFTestCase):
     )
     self.assertResourceCalled('Execute',
                               '/tmp/start_hiveserver2_interactive_script /var/run/hive/hive-server2-interactive.out /var/log/hive/hive-server2-interactive.err /var/run/hive/hive-interactive.pid /usr/hdp/current/hive-server2-hive2/conf/conf.server /var/log/hive',
-                              environment={'HADOOP_HOME': '/usr/hdp/current/hadoop-client',
-                                           'HIVE_BIN': 'hive2',
+                              environment={'HIVE_BIN': '/usr/hdp/current/hive-server2-hive2/bin/hive2',
                                            'JAVA_HOME': u'/usr/jdk64/jdk1.7.0_45'},
                               not_if="ls /var/run/hive/hive-interactive.pid >/dev/null 2>&1 && ps -p 123 >/dev/null 2>&1",
                               user='hive',
@@ -305,8 +304,7 @@ class TestHiveServerInteractive(RMFTestCase):
     )
     self.assertResourceCalled('Execute',
                               '/tmp/start_hiveserver2_interactive_script /var/run/hive/hive-server2-interactive.out /var/log/hive/hive-server2-interactive.err /var/run/hive/hive-interactive.pid /usr/hdp/current/hive-server2-hive2/conf/conf.server /var/log/hive',
-                              environment={'HADOOP_HOME': '/usr/hdp/current/hadoop-client',
-                                           'HIVE_BIN': 'hive2',
+                              environment={'HIVE_BIN': '/usr/hdp/current/hive-server2-hive2/bin/hive2',
                                            'JAVA_HOME': u'/usr/jdk64/jdk1.7.0_45'},
                               not_if="ls /var/run/hive/hive-interactive.pid >/dev/null 2>&1 && ps -p 123 >/dev/null 2>&1",
                               user='hive',
@@ -364,8 +362,7 @@ class TestHiveServerInteractive(RMFTestCase):
                               )
     self.assertResourceCalled('Execute',
                               '/tmp/start_hiveserver2_interactive_script /var/run/hive/hive-server2-interactive.out /var/log/hive/hive-server2-interactive.err /var/run/hive/hive-interactive.pid /usr/hdp/current/hive-server2-hive2/conf/conf.server /var/log/hive',
-                              environment={'HADOOP_HOME': '/usr/hdp/current/hadoop-client',
-                                           'HIVE_BIN': 'hive2',
+                              environment={'HIVE_BIN': '/usr/hdp/current/hive-server2-hive2/bin/hive2',
                                            'JAVA_HOME': u'/usr/jdk64/jdk1.7.0_45'},
                               not_if="ls /var/run/hive/hive-interactive.pid >/dev/null 2>&1 && ps -p 123 >/dev/null 2>&1",
                               user='hive',
@@ -417,6 +414,22 @@ class TestHiveServerInteractive(RMFTestCase):
 
 
   def assert_configure_default(self, no_tmp=False, default_fs_default=u'hdfs://c6401.ambari.apache.org:8020', with_cs_enabled=False):
+
+    self.assertResourceCalled('HdfsResource', '/apps/hive/warehouse',
+                              immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
+                              security_enabled = False,
+                              hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+                              keytab = UnknownConfigurationMock(),
+                              kinit_path_local = '/usr/bin/kinit',
+                              user = 'hdfs',
+                              dfs_type = '',
+                              owner = 'hive',
+                              group = 'hadoop',
+                              hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                              type = 'directory',
+                              action = ['create_on_execute'], hdfs_resource_ignore_file='/var/lib/ambari-agent/data/.hdfs_resource_ignore', hdfs_site=self.getConfig()['configurations']['hdfs-site'], principal_name='missing_principal', default_fs=default_fs_default,
+                              mode = 0777,
+    )
 
     self.assertResourceCalled('HdfsResource', '/user/hive',
                               immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
@@ -698,9 +711,19 @@ class TestHiveServerInteractive(RMFTestCase):
                               group='root',
                               mode=0644,
     )
+    self.assertResourceCalled('File', '/usr/hdp/current/hive-server2-hive2/lib/None',
+                              action=['delete'],
+                              )
+    self.assertResourceCalled('Execute', ('rm', '-f',
+                                          '/usr/hdp/current/hive-server2-hive2/lib/ojdbc6.jar'),
+                              path=["/bin", "/usr/bin/"],
+                              sudo = True,
+                              )
+    self.assertResourceCalled('File', '/tmp/mysql-connector-java.jar',
+                              content = DownloadSource('http://c6401.ambari.apache.org:8080/resources//mysql-connector-java.jar'))
     self.assertResourceCalled('Execute', ('cp',
                                           '--remove-destination',
-                                          '/usr/share/java/mysql-connector-java.jar',
+                                          '/tmp/mysql-connector-java.jar',
                                           '/usr/hdp/current/hive-server2-hive2/lib/mysql-connector-java.jar'),
                               path=['/bin', '/usr/bin/'],
                               sudo=True,
@@ -903,6 +926,27 @@ class TestHiveServerInteractive(RMFTestCase):
     self.assertEqual(llap_app_info_as_json, expected_llap_app_info_as_json)
 
 
+
+  # Tests for function '_make_valid_json()' : will be passed in with 'llapstatus' output which will be :
+  #     (1). A string parseable as JSON, but has 2 and 3.
+  #     (2). Has extra lines in beginning (eg: from MOTD logging embedded)
+  #          AND/OR
+  #     (3). Extra lines at the end.
+
+  # Begginning and end lines need to be removed before parsed as JSON
+  def test_make_valid_json_11(self):
+      # Setting up input for fn. '_make_valid_json()'
+      input_file_handle = open(self.get_src_folder() + "/test/python/stacks/2.5/HIVE/running_withMOTDmsg_andTrailingMsg.txt","r")
+      llap_app_info = input_file_handle.read()
+      llap_app_info_as_json = self.hsi._make_valid_json(llap_app_info)
+
+      # Set up expected output
+      expected_ouput_file_handle = open(self.get_src_folder() + "/test/python/stacks/2.5/HIVE/running.json","r")
+      expected_ouput_data = expected_ouput_file_handle.read()
+      expected_ouput_data_as_json = json.loads(expected_ouput_data)
+
+      # Verification
+      self.assertEqual(llap_app_info_as_json, expected_ouput_data_as_json)
 
 
   # Tests for fn : 'check_llap_app_status_in_hdp_tp()'

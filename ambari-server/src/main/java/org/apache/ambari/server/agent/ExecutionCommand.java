@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,11 +24,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.ambari.annotations.Experimental;
+import org.apache.ambari.annotations.ExperimentalFeature;
+import org.apache.ambari.server.AmbariException;
 import org.apache.ambari.server.RoleCommand;
-import org.apache.ambari.server.state.ServiceInfo;
+import org.apache.ambari.server.state.Cluster;
+import org.apache.ambari.server.state.UpgradeContext.UpgradeSummary;
 import org.apache.ambari.server.utils.StageUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.gson.annotations.SerializedName;
 
@@ -39,7 +43,7 @@ import com.google.gson.annotations.SerializedName;
  */
 public class ExecutionCommand extends AgentCommand {
 
-  private static Log LOG = LogFactory.getLog(ExecutionCommand.class);
+  private static final Logger LOG = LoggerFactory.getLogger(ExecutionCommand.class);
 
   public ExecutionCommand() {
     super(AgentCommandType.EXECUTION_COMMAND);
@@ -76,8 +80,7 @@ public class ExecutionCommand extends AgentCommand {
   private RoleCommand roleCommand;
 
   @SerializedName("clusterHostInfo")
-  private Map<String, Set<String>> clusterHostInfo =
-      new HashMap<>();
+  private Map<String, Set<String>> clusterHostInfo = new HashMap<>();
 
   @SerializedName("configurations")
   private Map<String, Map<String, String>> configurations;
@@ -108,9 +111,6 @@ public class ExecutionCommand extends AgentCommand {
 
   @SerializedName("localComponents")
   private Set<String> localComponents = new HashSet<>();
-
-  @SerializedName("availableServices")
-  private Map<String, String> availableServices = new HashMap<>();
 
   /**
    * "true" or "false" indicating whether this
@@ -143,6 +143,23 @@ public class ExecutionCommand extends AgentCommand {
    */
   @SerializedName("configuration_credentials")
   private Map<String, Map<String, String>> configurationCredentials;
+
+
+  /**
+   * Provides information regarding the content of repositories.  This structure replaces
+   * the deprecated use of {@link KeyNames#REPO_INFO}
+   */
+  @SerializedName("repositoryFile")
+  private CommandRepository commandRepository;
+
+  @SerializedName("componentVersionMap")
+  private Map<String, Map<String, String>> componentVersionMap = new HashMap<>();
+
+  @SerializedName("upgradeSummary")
+  private UpgradeSummary upgradeSummary;
+
+  @SerializedName("roleParameters")
+  private Map<String, Object> roleParameters;
 
   public void setConfigurationCredentials(Map<String, Map<String, String>> configurationCredentials) {
     this.configurationCredentials = configurationCredentials;
@@ -219,6 +236,10 @@ public class ExecutionCommand extends AgentCommand {
     return roleParams;
   }
 
+  /**
+   * Sets the roleParams for the command.  Consider instead using {@link #setRoleParameters}
+   * @param roleParams
+   */
   public void setRoleParams(Map<String, String> roleParams) {
     this.roleParams = roleParams;
   }
@@ -291,18 +312,6 @@ public class ExecutionCommand extends AgentCommand {
     this.localComponents = localComponents;
   }
 
-  public Map<String, String> getAvailableServices() {
-    return availableServices;
-  }
-
-  public void setAvailableServicesFromServiceInfoMap(Map<String, ServiceInfo> serviceInfoMap) {
-    Map<String, String> serviceVersionMap = new HashMap<>();
-    for (Map.Entry<String, ServiceInfo> entry : serviceInfoMap.entrySet()) {
-      serviceVersionMap.put(entry.getKey(), entry.getValue().getVersion());
-    }
-    availableServices = serviceVersionMap;
-  }
-
   public Map<String, Map<String, Map<String, String>>> getConfigurationAttributes() {
     return configurationAttributes;
   }
@@ -328,11 +337,11 @@ public class ExecutionCommand extends AgentCommand {
   }
 
   public String getServiceType() {
-	return serviceType;
+    return serviceType;
   }
 
   public void setServiceType(String serviceType) {
-	this.serviceType = serviceType;
+    this.serviceType = serviceType;
   }
 
   /**
@@ -395,10 +404,41 @@ public class ExecutionCommand extends AgentCommand {
   }
 
   /**
+   * @return the repository file that is to be written.
+   */
+  public CommandRepository getRepositoryFile() {
+    return commandRepository;
+  }
+
+  /**
+   * @param repository  the command repository instance.
+   */
+  public void setRepositoryFile(CommandRepository repository) {
+    commandRepository = repository;
+  }
+
+  /**
+   * Gets the object-based role parameters for the command.
+   */
+  public Map<String, Object> getRoleParameters() {
+    return roleParameters;
+  }
+
+  /**
+   * Sets the role parameters for the command.  This is preferred over {@link #setRoleParams(Map)},
+   * as this form will pass values as structured data, as opposed to unstructured, escaped json.
+   *
+   * @param params
+   */
+  public void setRoleParameters(Map<String, Object> params) {
+    roleParameters = params;
+  }
+
+  /**
    * Contains key name strings. These strings are used inside maps
    * incapsulated inside command.
    */
-  public static interface KeyNames {
+  public interface KeyNames {
     String COMMAND_TIMEOUT = "command_timeout";
     String SCRIPT = "script";
     String SCRIPT_TYPE = "script_type";
@@ -413,6 +453,7 @@ public class ExecutionCommand extends AgentCommand {
     String IGNORE_PACKAGE_DEPENDENCIES = "ignore_package_dependencies";
     String JDK_LOCATION = "jdk_location";
     String JAVA_HOME = "java_home";
+    String GPL_LICENSE_ACCEPTED = "gpl_license_accepted";
     String JAVA_VERSION = "java_version";
     String JDK_NAME = "jdk_name";
     String JCE_NAME = "jce_name";
@@ -421,7 +462,13 @@ public class ExecutionCommand extends AgentCommand {
     String ORACLE_JDBC_URL = "oracle_jdbc_url";
     String DB_DRIVER_FILENAME = "db_driver_filename";
     String CLIENTS_TO_UPDATE_CONFIGS = "clientsToUpdateConfigs";
+    /**
+     * Keep for backward compatibility.
+     */
+    @Deprecated
+    @Experimental(feature=ExperimentalFeature.PATCH_UPGRADES)
     String REPO_INFO = "repo_info";
+
     String DB_NAME = "db_name";
     String GLOBAL = "global";
     String AMBARI_DB_RCA_URL = "ambari_db_rca_url";
@@ -433,9 +480,6 @@ public class ExecutionCommand extends AgentCommand {
     String GROUP_LIST = "group_list";
     String USER_GROUPS = "user_groups";
     String NOT_MANAGED_HDFS_PATH_LIST = "not_managed_hdfs_path_list";
-    String VERSION = "version";
-    String SOURCE_STACK = "source_stack";
-    String TARGET_STACK = "target_stack";
     String REFRESH_TOPOLOGY = "refresh_topology";
     String HOST_SYS_PREPPED = "host_sys_prepped";
     String MAX_DURATION_OF_RETRIES = "max_duration_for_retries";
@@ -456,6 +500,8 @@ public class ExecutionCommand extends AgentCommand {
     /**
      * The key indicating that the package_version string is available
      */
+    @Deprecated
+    @Experimental(feature=ExperimentalFeature.PATCH_UPGRADES)
     String PACKAGE_VERSION = "package_version";
 
     /**
@@ -470,6 +516,79 @@ public class ExecutionCommand extends AgentCommand {
      * The agent will return this value back in its response so the repository
      * can be looked up and possibly have its version updated.
      */
+    @Deprecated
+    @Experimental(feature=ExperimentalFeature.PATCH_UPGRADES)
     String REPO_VERSION_ID = "repository_version_id";
+
+    /**
+     * The version of the component to send down with the command. Normally,
+     * this is simply the repository version of the component. However, during
+     * upgrades, this value may change depending on the progress of the upgrade
+     * and the type/direction.
+     */
+    String VERSION = "version";
+
+    /**
+     * Previously used to represent the version of a cluster, this singular
+     * value is no longer valid. However, to maintain backward compatibility
+     * with Python code inside of management packs and extension services it
+     * will be still be provided. It should be set to the repository version of
+     * the command, if th repository has been resolved.
+     */
+    @Deprecated
+    @Experimental(
+        feature = ExperimentalFeature.PATCH_UPGRADES,
+        comment = "This value is still around purely for backward compatibility with mpacks")
+    String CURRENT_VERSION = "current_version";
+
+
+    /**
+     * When installing packages, includes what services will be included in the upgrade
+     */
+    String CLUSTER_VERSION_SUMMARY = "cluster_version_summary";
+  }
+
+  /**
+   * @return
+   */
+  public Map<String, Map<String, String>> getComponentVersionMap() {
+    return componentVersionMap;
+  }
+
+  /**
+   * Used to set a map of {service -> { component -> version}}. This is
+   * necessary when performing an upgrade to correct build paths of required
+   * binaries. This method will only set the version information for a component
+   * if:
+   * <ul>
+   * <li>The component advertises a version</li>
+   * <li>The repository for the component has been resolved and the version can
+   * be trusted</li>
+   * </ul>
+   *
+   * @param cluster
+   *          the cluster from which to build the map
+   */
+  public void setComponentVersions(Cluster cluster) throws AmbariException {
+    componentVersionMap = cluster.getComponentVersionMap();
+  }
+
+  /**
+   * Sets the upgrade summary if there is an active upgrade in the cluster.
+   *
+   * @param upgradeSummary
+   *          the upgrade or {@code null} for none.
+   */
+  public void setUpgradeSummary(UpgradeSummary upgradeSummary) {
+    this.upgradeSummary = upgradeSummary;
+  }
+
+  /**
+   * Gets the upgrade summary if there is an active upgrade in the cluster.
+   *
+   * @return the upgrade or {@code null} for none.
+   */
+  public UpgradeSummary getUpgradeSummary() {
+    return upgradeSummary;
   }
 }

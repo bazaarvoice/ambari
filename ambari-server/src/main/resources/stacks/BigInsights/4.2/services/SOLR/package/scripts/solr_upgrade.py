@@ -20,7 +20,6 @@ import os
 from resource_management import *
 from resource_management.core.logger import Logger
 from resource_management.core.resources.system import Execute
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import get_unique_id_and_date
 
 class SolrServerUpgrade(Script):
@@ -40,8 +39,6 @@ class SolrServerUpgrade(Script):
 
     solr41_conf_dir="/usr/iop/4.1.0.0/solr/conf"
     solr41_etc_dir="/etc/solr/4.1.0.0/0"
-    if not os.path.exists(solr41_etc_dir):
-      conf_select.create(params.stack_name, "solr", "4.1.0.0")
 
     content_path=solr41_conf_dir
     if not os.path.isfile("/usr/iop/4.1.0.0/solr/conf/solr.in.sh"):
@@ -65,8 +62,6 @@ class SolrServerUpgrade(Script):
            to=solr41_etc_dir
       )
 
-    conf_select.select(params.stack_name, "solr", "4.1.0.0")
-
   def pre_stop_backup_cores(self, env):
     """
     Backs up the Solr cores under Solr's home directory.
@@ -75,13 +70,13 @@ class SolrServerUpgrade(Script):
     import params
     env.set_params(params)
 
-    if compare_versions(format_stack_version(params.current_version), '4.2.0.0') >= 0:
+    if compare_versions(format_stack_version(params.version), '4.2.0.0') >= 0:
       solr_home_dir=params.solr_data_dir
     else: #4.1.0.0
       solr_home_dir=params.old_lib_dir + "/data"
 
     unique = get_unique_id_and_date()
-    backup_solr_dir="/tmp/upgrades/{0}/solr_{1}".format(params.current_version, unique)
+    backup_solr_dir="/tmp/upgrades/{0}/solr_{1}".format(params.version, unique)
     backup_solr_cores="/tmp/solr/cores"
 
     if os.path.isdir(solr_home_dir) and not os.path.isdir(backup_solr_dir):

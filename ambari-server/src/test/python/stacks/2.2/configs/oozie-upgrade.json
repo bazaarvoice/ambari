@@ -55,7 +55,8 @@
         "mysql_jdbc_url": "http://c6401.ambari.apache.org:8080/resources//mysql-connector-java.jar",
         "custom_mysql_jdbc_name" : "mysql-connector-java.jar",
         "custom_oracle_jdbc_name" : "oracle-jdbc-driver.jar",
-        "custom_postgres_jdbc_name" : "test-postgres-jdbc.jar"
+        "custom_postgres_jdbc_name" : "test-postgres-jdbc.jar",
+        "gpl_license_accepted": "true"
     }, 
     "commandType": "EXECUTION_COMMAND", 
     "roleParams": {
@@ -65,7 +66,44 @@
     "role": "OOZIE_SERVER",
     "forceRefreshConfigTags": [], 
     "taskId": 305, 
-    "public_hostname": "c6402.ambari.apache.org", 
+    "public_hostname": "c6402.ambari.apache.org",
+    "repositoryFile": {
+        "resolved": true, 
+        "repoVersion": "2.6.4.0-52", 
+        "repositories": [
+            {
+                "tags": [], 
+                "ambariManaged": true, 
+                "baseUrl": "http://s3.amazonaws.com/dev.hortonworks.com/HDP/centos6/2.x/BUILDS/2.6.4.0-52", 
+                "repoName": "HDP", 
+                "repoId": "HDP-2.6-repo-1", 
+                "applicableServices": []
+            }, 
+            {
+                "repoName": "HDP-GPL", 
+                "tags": [
+                    "GPL"
+                ], 
+                "ambariManaged": true, 
+                "baseUrl": "http://s3.amazonaws.com/dev.hortonworks.com/HDP-GPL/centos6/2.x/BUILDS/2.6.4.0-52", 
+                "repoId": "HDP-2.6-GPL-repo-1"
+            }, 
+            {
+                "repoName": "HDP-UTILS", 
+                "tags": [], 
+                "ambariManaged": true, 
+                "baseUrl": "http://s3.amazonaws.com/dev.hortonworks.com/HDP-UTILS-1.1.0.22/repos/centos6", 
+                "repoId": "HDP-UTILS-1.1.0.22-repo-1"
+            }
+        ], 
+        "feature": {
+            "preInstalled": false, 
+            "scoped": true
+        }, 
+        "stackName": "HDP", 
+        "repoVersionId": 1, 
+        "repoFileName": "ambari-hdp-1"
+    },
     "configurations": {
         "oozie-env": {
             "oozie_heapsize": "2048m", 

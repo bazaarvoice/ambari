@@ -41,7 +41,7 @@ from resource_management.libraries.functions.hdfs_utils import is_https_enabled_
 
 
 import ambari_simplejson as json # simplejson is much faster comparing to Python 2.6 json module and has the same functions set.
-import subprocess
+from ambari_commons import subprocess32
 
 JSON_PATH = '/var/lib/ambari-agent/tmp/hdfs_resources_{timestamp}.json'
 JAR_PATH = '/var/lib/ambari-agent/lib/fast-hdfs-resource.jar'
@@ -204,6 +204,8 @@ class WebHDFSUtil:
     depending on if query was successful or not, we can assert this for them
     """
     target = HdfsResourceProvider.parse_path(target)
+    if not target:
+      raise Fail("Target cannot be empty")
 
     url = format("{address}/webhdfs/v1{target}?op={operation}", address=self.address)
     request_args = kwargs

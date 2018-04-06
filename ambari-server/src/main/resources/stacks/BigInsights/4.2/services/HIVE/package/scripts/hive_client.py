@@ -19,7 +19,6 @@ limitations under the License.
 """
 import sys
 from resource_management import *
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from hive import hive
 from ambari_commons.os_family_impl import OsFamilyImpl
@@ -42,9 +41,6 @@ class HiveClient(Script):
   
 @OsFamilyImpl(os_family=OsFamilyImpl.DEFAULT)
 class HiveClientDefault(HiveClient):        
-  def get_component_name(self):
-    return "hadoop-client"
-
   def pre_upgrade_restart(self, env, upgrade_type=None):
     Logger.info("Executing Hive client Stack Upgrade pre-restart")
 
@@ -52,9 +48,7 @@ class HiveClientDefault(HiveClient):
     env.set_params(params)
 
     if params.version and compare_versions(format_stack_version(params.version), '4.1.0.0') >= 0:
-      conf_select.select(params.stack_name, "hive", params.version)
-      conf_select.select(params.stack_name, "hadoop", params.version)
-      stack_select.select("hadoop-client", params.version)
+      stack_select.select_packages(params.version)
 
   def pre_upgrade_restart(self, env, upgrade_type=None):
     """
@@ -77,7 +71,7 @@ class HiveClientDefault(HiveClient):
     # HCat client doesn't have a first-class entry in hdp-select. Since clients always
     # update after daemons, this ensures that the hcat directories are correct on hosts
     # which do not include the WebHCat daemon
-    stack_select.select("hive-webhcat", params.version)
+    stack_select.select_packages(params.version)
 
 if __name__ == "__main__":
   HiveClient().execute()

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,26 +18,6 @@
 
 package org.apache.ambari.server.controller.internal;
 
-import org.apache.ambari.server.controller.spi.ResourceProvider;
-import org.apache.ambari.server.topology.Blueprint;
-import org.apache.ambari.server.topology.BlueprintFactory;
-import org.apache.ambari.server.topology.Configuration;
-import org.apache.ambari.server.topology.HostGroup;
-import org.apache.ambari.server.topology.HostGroupInfo;
-import org.apache.ambari.server.topology.InvalidTopologyTemplateException;
-import org.apache.ambari.server.topology.TopologyRequest;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.lang.reflect.Field;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.Set;
-
 import static org.easymock.EasyMock.createMock;
 import static org.easymock.EasyMock.createNiceMock;
 import static org.easymock.EasyMock.expect;
@@ -49,6 +29,26 @@ import static org.junit.Assert.assertTrue;
 import static org.powermock.api.easymock.PowerMock.createStrictMock;
 import static org.powermock.api.easymock.PowerMock.replay;
 import static org.powermock.api.easymock.PowerMock.reset;
+
+import java.lang.reflect.Field;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.ambari.server.controller.spi.ResourceProvider;
+import org.apache.ambari.server.topology.Blueprint;
+import org.apache.ambari.server.topology.BlueprintFactory;
+import org.apache.ambari.server.topology.Configuration;
+import org.apache.ambari.server.topology.HostGroup;
+import org.apache.ambari.server.topology.HostGroupInfo;
+import org.apache.ambari.server.topology.InvalidTopologyTemplateException;
+import org.apache.ambari.server.topology.TopologyRequest;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
 
 /**
  * Unit tests for ScaleClusterRequest.
@@ -102,12 +102,17 @@ public class ScaleClusterRequestTest {
 
   @Test
   public void test_basic_hostName() throws Exception {
+    Map<String, Object> props = createScaleClusterPropertiesGroup1_HostName(CLUSTER_NAME, BLUEPRINT_NAME);
+    addSingleHostByName(props);
+    addSingleHostByName(replaceWithPlainHostNameKey(props));
+  }
+
+  private void addSingleHostByName(Map<String, Object> props) throws InvalidTopologyTemplateException {
     // reset default host resource provider expectations to none since no host predicate is used
     reset(hostResourceProvider);
     replay(hostResourceProvider);
 
-    ScaleClusterRequest scaleClusterRequest = new ScaleClusterRequest(Collections.singleton(
-        createScaleClusterPropertiesGroup1_HostName(CLUSTER_NAME, BLUEPRINT_NAME)));
+    ScaleClusterRequest scaleClusterRequest = new ScaleClusterRequest(Collections.singleton(props));
 
     assertEquals(TopologyRequest.Type.SCALE, scaleClusterRequest.getType());
     assertEquals(String.format("Scale Cluster '%s' (+%s hosts)", CLUSTER_NAME, "1"),
@@ -129,13 +134,21 @@ public class ScaleClusterRequestTest {
 
   @Test
   public void testMultipleHostNames() throws Exception {
+    Set<Map<String, Object>> propertySet = new HashSet<>();
+    propertySet.add(createScaleClusterPropertiesGroup1_HostName(CLUSTER_NAME, BLUEPRINT_NAME));
+    propertySet.add(createScaleClusterPropertiesGroup1_HostName2(CLUSTER_NAME, BLUEPRINT_NAME));
+    addMultipleHostsByName(propertySet);
+
+    for (Map<String, Object> props : propertySet) {
+      replaceWithPlainHostNameKey(props);
+    }
+    addMultipleHostsByName(propertySet);
+  }
+
+  private void addMultipleHostsByName(Set<Map<String, Object>> propertySet) throws InvalidTopologyTemplateException {
     // reset default host resource provider expectations to none since no host predicate is used
     reset(hostResourceProvider);
     replay(hostResourceProvider);
-
-    Set<Map<String, Object>> propertySet = new HashSet<Map<String, Object>>();
-    propertySet.add(createScaleClusterPropertiesGroup1_HostName(CLUSTER_NAME, BLUEPRINT_NAME));
-    propertySet.add(createScaleClusterPropertiesGroup1_HostName2(CLUSTER_NAME, BLUEPRINT_NAME));
 
     ScaleClusterRequest scaleClusterRequest = new ScaleClusterRequest(propertySet);
 
@@ -234,7 +247,7 @@ public class ScaleClusterRequestTest {
 
   @Test
   public void testMultipleHostGroups() throws Exception {
-    Set<Map<String, Object>> propertySet = new HashSet<Map<String, Object>>();
+    Set<Map<String, Object>> propertySet = new HashSet<>();
     propertySet.add(createScaleClusterPropertiesGroup1_HostCountAndPredicate(CLUSTER_NAME, BLUEPRINT_NAME));
     propertySet.add(createScaleClusterPropertiesGroup1_HostCount(CLUSTER_NAME, BLUEPRINT_NAME));
     propertySet.add(createScaleClusterPropertiesGroup1_HostName(CLUSTER_NAME, BLUEPRINT_NAME));
@@ -294,7 +307,7 @@ public class ScaleClusterRequestTest {
   public void test_NoHostNameOrHostCount() throws Exception {
     Map<String, Object> properties = createScaleClusterPropertiesGroup1_HostName(CLUSTER_NAME, BLUEPRINT_NAME);
     // remove host name
-    properties.remove("host_name");
+    properties.remove("Hosts/host_name");
 
     // reset default host resource provider expectations to none
     reset(hostResourceProvider);
@@ -322,7 +335,7 @@ public class ScaleClusterRequestTest {
     reset(hostResourceProvider);
     replay(hostResourceProvider);
 
-    Set<Map<String, Object>> propertySet = new LinkedHashSet<Map<String, Object>>();
+    Set<Map<String, Object>> propertySet = new LinkedHashSet<>();
     propertySet.add(createScaleClusterPropertiesGroup1_HostName(CLUSTER_NAME, BLUEPRINT_NAME));
     propertySet.add(createScaleClusterPropertiesGroup1_HostName2(CLUSTER_NAME, "OTHER_BLUEPRINT"));
 
@@ -331,33 +344,40 @@ public class ScaleClusterRequestTest {
   }
 
   public static Map<String, Object> createScaleClusterPropertiesGroup1_HostName(String clusterName, String blueprintName) {
-    Map<String, Object> properties = new LinkedHashMap<String, Object>();
+    Map<String, Object> properties = new LinkedHashMap<>();
 
     properties.put(HostResourceProvider.HOST_CLUSTER_NAME_PROPERTY_ID, clusterName);
     properties.put(HostResourceProvider.BLUEPRINT_PROPERTY_ID, blueprintName);
-    properties.put(HostResourceProvider.HOSTGROUP_PROPERTY_ID, GROUP1_NAME);
-    properties.put(HostResourceProvider.HOST_NAME_NO_CATEGORY_PROPERTY_ID, HOST1_NAME);
+    properties.put(HostResourceProvider.HOST_GROUP_PROPERTY_ID, GROUP1_NAME);
+    properties.put(HostResourceProvider.HOST_HOST_NAME_PROPERTY_ID, HOST1_NAME);
 
     return properties;
   }
 
+  // include host name under "host_name" key instead of "Hosts/host_name"
+  private static Map<String, Object> replaceWithPlainHostNameKey(Map<String, Object> properties) {
+    Object value = properties.remove(HostResourceProvider.HOST_HOST_NAME_PROPERTY_ID);
+    properties.put(HostResourceProvider.HOST_NAME_PROPERTY_ID, value);
+    return properties;
+  }
+
   public static Map<String, Object> createScaleClusterPropertiesGroup1_HostCount(String clusterName, String blueprintName) {
-    Map<String, Object> properties = new LinkedHashMap<String, Object>();
+    Map<String, Object> properties = new LinkedHashMap<>();
 
     properties.put(HostResourceProvider.HOST_CLUSTER_NAME_PROPERTY_ID, clusterName);
     properties.put(HostResourceProvider.BLUEPRINT_PROPERTY_ID, blueprintName);
-    properties.put(HostResourceProvider.HOSTGROUP_PROPERTY_ID, GROUP2_NAME);
+    properties.put(HostResourceProvider.HOST_GROUP_PROPERTY_ID, GROUP2_NAME);
     properties.put(HostResourceProvider.HOST_COUNT_PROPERTY_ID, 1);
 
     return properties;
   }
 
   public static Map<String, Object> createScaleClusterPropertiesGroup1_HostCountAndPredicate(String clusterName, String blueprintName) {
-    Map<String, Object> properties = new LinkedHashMap<String, Object>();
+    Map<String, Object> properties = new LinkedHashMap<>();
 
     properties.put(HostResourceProvider.HOST_CLUSTER_NAME_PROPERTY_ID, clusterName);
     properties.put(HostResourceProvider.BLUEPRINT_PROPERTY_ID, blueprintName);
-    properties.put(HostResourceProvider.HOSTGROUP_PROPERTY_ID, GROUP3_NAME);
+    properties.put(HostResourceProvider.HOST_GROUP_PROPERTY_ID, GROUP3_NAME);
     properties.put(HostResourceProvider.HOST_COUNT_PROPERTY_ID, 1);
     properties.put(HostResourceProvider.HOST_PREDICATE_PROPERTY_ID, PREDICATE);
 
@@ -365,23 +385,23 @@ public class ScaleClusterRequestTest {
   }
 
   public static Map<String, Object> createScaleClusterPropertiesGroup1_HostCount2(String clusterName, String blueprintName) {
-    Map<String, Object> properties = new LinkedHashMap<String, Object>();
+    Map<String, Object> properties = new LinkedHashMap<>();
 
     properties.put(HostResourceProvider.HOST_CLUSTER_NAME_PROPERTY_ID, clusterName);
     properties.put(HostResourceProvider.BLUEPRINT_PROPERTY_ID, blueprintName);
-    properties.put(HostResourceProvider.HOSTGROUP_PROPERTY_ID, GROUP3_NAME);
+    properties.put(HostResourceProvider.HOST_GROUP_PROPERTY_ID, GROUP3_NAME);
     properties.put(HostResourceProvider.HOST_COUNT_PROPERTY_ID, 2);
 
     return properties;
   }
 
   public static Map<String, Object> createScaleClusterPropertiesGroup1_HostName2(String clusterName, String blueprintName) {
-    Map<String, Object> properties = new LinkedHashMap<String, Object>();
+    Map<String, Object> properties = new LinkedHashMap<>();
 
     properties.put(HostResourceProvider.HOST_CLUSTER_NAME_PROPERTY_ID, clusterName);
     properties.put(HostResourceProvider.BLUEPRINT_PROPERTY_ID, blueprintName);
-    properties.put(HostResourceProvider.HOSTGROUP_PROPERTY_ID, GROUP1_NAME);
-    properties.put(HostResourceProvider.HOST_NAME_NO_CATEGORY_PROPERTY_ID, HOST2_NAME);
+    properties.put(HostResourceProvider.HOST_GROUP_PROPERTY_ID, GROUP1_NAME);
+    properties.put(HostResourceProvider.HOST_HOST_NAME_PROPERTY_ID, HOST2_NAME);
 
     return properties;
   }

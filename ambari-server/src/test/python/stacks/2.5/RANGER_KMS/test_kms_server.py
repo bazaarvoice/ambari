@@ -171,8 +171,8 @@ class TestRangerKMS(RMFTestCase):
                         security_enabled = False,
                         keytab = None,
                         kinit_path_local = '/usr/bin/kinit',
-                        hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
-                        hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                        hadoop_bin_dir = '/usr/hdp/2.5.0.0-777/hadoop/bin',
+                        hadoop_conf_dir = '/usr/hdp/2.5.0.0-777/hadoop/conf',
                         principal_name = None,
                         hdfs_site = self.getConfig()['configurations']['hdfs-site'],
                         default_fs = 'hdfs://c6401.ambari.apache.org:8020'
@@ -189,8 +189,8 @@ class TestRangerKMS(RMFTestCase):
                         security_enabled = False,
                         keytab = None,
                         kinit_path_local = '/usr/bin/kinit',
-                        hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
-                        hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                        hadoop_bin_dir = '/usr/hdp/2.5.0.0-777/hadoop/bin',
+                        hadoop_conf_dir = '/usr/hdp/2.5.0.0-777/hadoop/conf',
                         principal_name = None,
                         hdfs_site = self.getConfig()['configurations']['hdfs-site'],
                         default_fs = 'hdfs://c6401.ambari.apache.org:8020'
@@ -202,8 +202,8 @@ class TestRangerKMS(RMFTestCase):
                         security_enabled = False,
                         keytab = None,
                         kinit_path_local = '/usr/bin/kinit',
-                        hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
-                        hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                        hadoop_bin_dir = '/usr/hdp/2.5.0.0-777/hadoop/bin',
+                        hadoop_conf_dir = '/usr/hdp/2.5.0.0-777/hadoop/conf',
                         principal_name = None,
                         hdfs_site = self.getConfig()['configurations']['hdfs-site'],
                         default_fs = 'hdfs://c6401.ambari.apache.org:8020'
@@ -355,6 +355,13 @@ class TestRangerKMS(RMFTestCase):
       group = 'hadoop',
       cd_access = "a",
       create_parents=True
+    )
+
+    self.assertResourceCalled('File', '/usr/hdp/current/ranger-kms/conf/ranger-kms-env.sh',
+      content = 'export JAVA_HOME=/usr/jdk64/jdk1.7.0_45',
+      owner = 'kms',
+      group = 'kms',
+      mode = 0755
     )
 
     self.assertResourceCalled('File', '/usr/hdp/current/ranger-kms/conf/ranger-kms-env-piddir.sh',
@@ -611,8 +618,8 @@ class TestRangerKMS(RMFTestCase):
                         security_enabled = True,
                         keytab = '/etc/security/keytabs/hdfs.headless.keytab',
                         kinit_path_local = '/usr/bin/kinit',
-                        hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
-                        hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                        hadoop_bin_dir = '/usr/hdp/2.5.0.0-777/hadoop/bin',
+                        hadoop_conf_dir = '/usr/hdp/2.5.0.0-777/hadoop/conf',
                         principal_name = 'hdfs-cl1@EXAMPLE.COM',
                         hdfs_site = self.getConfig()['configurations']['hdfs-site'],
                         default_fs = 'hdfs://c6401.ambari.apache.org:8020'
@@ -629,8 +636,8 @@ class TestRangerKMS(RMFTestCase):
                         security_enabled = True,
                         keytab = '/etc/security/keytabs/hdfs.headless.keytab',
                         kinit_path_local = '/usr/bin/kinit',
-                        hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
-                        hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                        hadoop_bin_dir = '/usr/hdp/2.5.0.0-777/hadoop/bin',
+                        hadoop_conf_dir = '/usr/hdp/2.5.0.0-777/hadoop/conf',
                         principal_name = 'hdfs-cl1@EXAMPLE.COM',
                         hdfs_site = self.getConfig()['configurations']['hdfs-site'],
                         default_fs = 'hdfs://c6401.ambari.apache.org:8020'
@@ -642,8 +649,8 @@ class TestRangerKMS(RMFTestCase):
                         security_enabled = True,
                         keytab = '/etc/security/keytabs/hdfs.headless.keytab',
                         kinit_path_local = '/usr/bin/kinit',
-                        hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
-                        hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                        hadoop_bin_dir = '/usr/hdp/2.5.0.0-777/hadoop/bin',
+                        hadoop_conf_dir = '/usr/hdp/2.5.0.0-777/hadoop/conf',
                         principal_name = 'hdfs-cl1@EXAMPLE.COM',
                         hdfs_site = self.getConfig()['configurations']['hdfs-site'],
                         default_fs = 'hdfs://c6401.ambari.apache.org:8020'
@@ -778,6 +785,13 @@ class TestRangerKMS(RMFTestCase):
       group = 'hadoop',
       cd_access = "a",
       create_parents=True
+    )
+
+    self.assertResourceCalled('File', '/usr/hdp/current/ranger-kms/conf/ranger-kms-env.sh',
+      content = 'export JAVA_HOME=/usr/jdk64/jdk1.7.0_45',
+      owner = 'kms',
+      group = 'kms',
+      mode = 0755
     )
 
     self.assertResourceCalled('File', '/usr/hdp/current/ranger-kms/conf/ranger-kms-env-piddir.sh',
