@@ -87,9 +87,24 @@ angular.module('ambariAdminConsole')
       return deferred.promise;
     },
 
+    getGPLLicenseAccepted: function() {
+      var deferred = $q.defer();
+
+      $http.get(Settings.baseUrl + '/services/AMBARI/components/AMBARI_SERVER?fields=RootServiceComponents/properties/gpl.license.accepted&minimal_response=true', {mock: 'true'})
+        .then(function(data) {
+          deferred.resolve(data.data.RootServiceComponents.properties['gpl.license.accepted']);
+        })
+        .catch(function(data) {
+          deferred.reject(data);
+        });
+
+      return deferred.promise;
+    },
+    
     allPublicStackVersions: function() {
-      var url = '/version_definitions?fields=VersionDefinition/stack_default,operating_systems/repositories/Repositories/*,VersionDefinition/stack_services,VersionDefinition/repository_version' +
-        '&VersionDefinition/show_available=true';
+      var url = '/version_definitions?fields=VersionDefinition/stack_default,VersionDefinition/type,' +
+        'operating_systems/repositories/Repositories/*,VersionDefinition/stack_services,' +
+        'VersionDefinition/repository_version&VersionDefinition/show_available=true';
       var deferred = $q.defer();
       $http.get(Settings.baseUrl + url, {mock: 'version/versions.json'})
         .success(function (data) {
@@ -146,6 +161,7 @@ angular.module('ambariAdminConsole')
     allRepos: function (filter, pagination) {
       var versionFilter = filter.version;
       var nameFilter = filter.name;
+      var typeFilter = filter.type;
       var stackFilter = filter.stack && filter.stack.current && filter.stack.current.value;
       var url = '/stacks?fields=versions/repository_versions/RepositoryVersions';
       if (versionFilter) {
@@ -153,6 +169,9 @@ angular.module('ambariAdminConsole')
       }
       if (nameFilter) {
         url += '&versions/repository_versions/RepositoryVersions/display_name.matches(.*' + nameFilter + '.*)';
+      }
+      if (typeFilter){
+        url += '&versions/repository_versions/RepositoryVersions/type.matches(.*' + typeFilter.toUpperCase() + '.*)';
       }
       if (stackFilter) {
         var stack = filter.stack.current.value.split('-'),
@@ -174,6 +193,8 @@ angular.module('ambariAdminConsole')
           });
         });
         repos = repos.map(function (stack) {
+          stack.RepositoryVersions.isPatch = stack.RepositoryVersions.type === 'PATCH';
+          stack.RepositoryVersions.isMaint = stack.RepositoryVersions.type === 'MAINT';
           return stack.RepositoryVersions;
         });
         // prepare response data with client side pagination
@@ -348,7 +369,8 @@ angular.module('ambariAdminConsole')
               $http.post(url + '/operating_systems/' + os.OperatingSystems.os_type + '/repositories/' + repo.Repositories.repo_id + '?validate_only=true',
                 {
                   "Repositories": {
-                    "base_url": repo.Repositories.base_url
+                    "base_url": repo.Repositories.base_url,
+                    "repo_name": repo.Repositories.repo_name
                   }
                 },
                 {
@@ -402,6 +424,18 @@ angular.module('ambariAdminConsole')
         return 0
       }
       return lId1 > lId2 ? 1 : -1;
+    },
+
+    filterAvailableServices: function (response) {
+      var stackVersion = response.updateObj.RepositoryVersions || response.updateObj.VersionDefinition;
+      var nonStandardVersion = stackVersion.type !== 'STANDARD';
+      var availableServices = (nonStandardVersion ? stackVersion.services : response.services).map(function (s) {
+        return s.name;
+      });
+      return response.services.filter(function (service) {
+        var skipServices = ['MAPREDUCE2', 'GANGLIA', 'KERBEROS'];
+        return skipServices.indexOf(service.name) === -1 && availableServices.indexOf(service.name) !== -1;
+      }) || [];
     }
 
   };

@@ -21,7 +21,6 @@ Ambari Agent
 
 from resource_management.libraries.script.script import Script
 from resource_management.libraries.resources.hdfs_resource import HdfsResource
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from resource_management.libraries.functions.check_process_status import check_process_status
 from resource_management.libraries.functions.copy_tarball import copy_to_hdfs
@@ -40,9 +39,6 @@ from ambari_commons.os_family_impl import OsFamilyImpl
 
 class HistoryServer(Script):
 
-  def get_component_name(self):
-    return "hadoop-mapreduce-historyserver"
-
   def install(self, env):
     self.install_packages(env)
 
@@ -57,8 +53,7 @@ class HistoryServer(Script):
     env.set_params(params)
 
     if params.version and compare_versions(format_stack_version(params.version), '4.0.0.0') >= 0:
-      conf_select.select(params.stack_name, "hadoop", params.version)
-      stack_select.select("hadoop-mapreduce-historyserver", params.version)
+      stack_select.select_packages(params.version)
       #Execute(format("iop-select set hadoop-mapreduce-historyserver {version}"))
       #copy_tarballs_to_hdfs('mapreduce', 'hadoop-mapreduce-historyserver', params.mapred_user, params.hdfs_user, params.user_group)
       # MC Hammer said, "Can't touch this"

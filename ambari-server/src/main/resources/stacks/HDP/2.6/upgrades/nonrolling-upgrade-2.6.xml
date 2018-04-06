@@ -21,6 +21,7 @@
   <target-stack>HDP-2.6</target-stack>
   <type>NON_ROLLING</type>
   <prerequisite-checks>
+    <check>org.apache.ambari.server.checks.LZOCheck</check>
     <configuration>
       <!-- Configuration properties for all pre-reqs including required pre-reqs -->
       <check-properties name="org.apache.ambari.server.checks.HiveDynamicServiceDiscoveryCheck">
@@ -146,6 +147,15 @@
         <component>DRUID_SUPERSET</component>
       </service>
 
+      <service name="RANGER">
+        <component>RANGER_USERSYNC</component>
+        <component>RANGER_ADMIN</component>
+        <component>RANGER_TAGSYNC</component>
+      </service>
+
+      <service name="RANGER_KMS">
+        <component>RANGER_KMS_SERVER</component>
+      </service>
     </group>
 
     <group xsi:type="cluster" name="Backups" title="Perform Backups">
@@ -166,6 +176,7 @@
       </execute-stage>
 
       <execute-stage service="HBASE" component="HBASE_MASTER" title="Snapshot HBASE">
+        <condition xsi:type="config" type="cluster-env" property="stack_upgrade_express_skip_hbase_snapshot" comparison="not-equals" value="true"/>
         <task xsi:type="execute" hosts="master">
           <script>scripts/hbase_upgrade.py</script>
           <function>take_snapshot</function>
@@ -223,16 +234,6 @@
         <component>NFS_GATEWAY</component>
       </service>
 
-      <service name="RANGER">
-        <component>RANGER_USERSYNC</component>
-        <component>RANGER_ADMIN</component>
-        <component>RANGER_TAGSYNC</component>
-      </service>
-
-      <service name="RANGER_KMS">
-        <component>RANGER_KMS_SERVER</component>
-      </service>
-
       <service name="ZOOKEEPER">
         <component>ZOOKEEPER_SERVER</component>
       </service>
@@ -277,10 +278,9 @@
     </group>
 
     <!-- After processing this group, will change the effective Stack of the UpgradeContext object. -->
-    <group xsi:type="update-stack" name="UPDATE_DESIRED_STACK_ID" title="Update Target Stack">
-      <execute-stage title="Update Target Stack">
-        <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.UpdateDesiredStackAction">
-        </task>
+    <group xsi:type="update-stack" name="UPDATE_DESIRED_REPOSITORY_ID" title="Update Target Repositories">
+      <execute-stage title="Update Target Repositories">
+        <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.UpdateDesiredRepositoryAction"/>
       </execute-stage>
     </group>
 
@@ -288,6 +288,13 @@
     <group xsi:type="cluster" name="Upgrade service configs" title="Upgrade service configs">
       <direction>UPGRADE</direction> <!--  prevent config changes on downgrade -->
       <skippable>true</skippable> <!-- May fix configuration problems manually -->
+
+      <!-- ZEPPELIN -->
+      <execute-stage service="ZEPPELIN" component="ZEPPELIN_MASTER" title="Apply zeppelin.notebook.storage config">
+        <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.FixNotebookStorage">
+          <summary>Adjusting Zeppelin Notebook properties</summary>
+        </task>
+      </execute-stage>
 
       <!-- HDFS -->
       <execute-stage service="HDFS" component="NAMENODE" title="Apply config changes for Ranger Hdfs plugin">
@@ -313,6 +320,12 @@
         </task>
       </execute-stage>
 
+      <execute-stage service="HIVE" component="HIVE_SERVER_INTERACTIVE" title="Update additional LLAP-Tez settings">
+        <task xsi:type="configure" id="llap_update_tez_shuffle_ssl_enable">
+          <summary>Update tez.runtime.shuffle.ssl.enable property</summary>
+        </task>
+      </execute-stage>
+
       <!-- HBASE -->
       <execute-stage service="HBASE" component="HBASE_MASTER" title="Apply config changes for Ranger Hbase plugin">
         <task xsi:type="configure" id="hdp_2_6_maint_ranger_hbase_plugin_cluster_name"/>
@@ -332,6 +345,10 @@
         <task xsi:type="configure" id="storm_nimbus_autocred_config"/>
       </execute-stage>
 
+      <execute-stage service="STORM" component="NIMBUS" title="Removing jmxetric from childopts">
+        <task xsi:type="configure" id="storm_remove_jmxetric" supports-patch="true"/>
+      </execute-stage>
+
       <!-- YARN -->
       <execute-stage service="YARN" component="RESOURCEMANAGER" title="Apply config changes for Ranger Yarn plugin">
         <task xsi:type="configure" id="hdp_2_6_maint_ranger_yarn_plugin_cluster_name"/>
@@ -341,7 +358,16 @@
         <task xsi:type="configure" id="hdp_2_6_yarn_preemption"/>
       </execute-stage>
 
-      <!-- YARN -->
+      <execute-stage service="YARN" component="RESOURCEMANAGER" title="Application Classpath Parameterization">
+        <task xsi:type="configure" id="hdp_2_6_yarn_app_classpath_parameterization" supports-patch="true"/>
+      </execute-stage>
+
+      <execute-stage service="YARN" component="APP_TIMELINE_SERVER" title="Spark Versioned Classpaths">
+        <task xsi:type="configure" id="hdp_2_6_yarn_spark_versioned_classpaths" supports-patch="true">
+          <summary>Updating the Spark classpath entries to use the specific version of Spark which is installed.</summary>
+        </task>
+      </execute-stage>
+
       <execute-stage service="YARN" component="NODEMANAGER" title="Apply config changes for YARN NM">
         <task xsi:type="configure" id="hdp_2_6_0_0_yarn_nodemanager_llap_mem">
           <summary>Updating YARN NodeManager config for LLAP</summary>
@@ -366,6 +392,18 @@
         <task xsi:type="configure" id="hdp_2_6_atlas_kafka_auto_commit_enable_property_delete"/>
       </execute-stage>
 
+      <execute-stage service="ATLAS" component="ATLAS_SERVER" title="Updating logger configurations for Atlas.">
+        <task xsi:type="configure" id="atlas_log4j_update_logger_settings"/>
+      </execute-stage>
+
+      <execute-stage service="ATLAS" component="ATLAS_SERVER" title="Adding configuration for hbase conf directory">
+        <task xsi:type="configure" id="atlas_hbase_conf_dir"/>
+      </execute-stage>
+
+      <execute-stage service="ATLAS" component="ATLAS_SERVER" title="Applying Atlas proxy-user configurations.">
+        <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.AtlasProxyUserConfigCalculation"/>
+      </execute-stage>
+
       <!-- KMS -->
       <execute-stage service="RANGER_KMS" component="RANGER_KMS_SERVER" title="Apply config changes for Ranger Kms plugin">
         <task xsi:type="configure" id="hdp_2_6_maint_ranger_kms_plugin_cluster_name"/>
@@ -381,6 +419,22 @@
         <task xsi:type="configure" id="hdp_2_6_0_0_spark2_thriftserver"/>
       </execute-stage>
 
+      <!-- RANGER -->
+      <execute-stage service="RANGER" component="RANGER_USERSYNC" title="Enabling Nested Group Sync for Ranger">
+        <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.RangerUsersyncConfigCalculation">
+          <summary>Enabling Nested Group Sync for Ranger</summary>
+        </task>
+      </execute-stage>
+
+      <!-- TEZ -->
+      <execute-stage service="TEZ" component="TEZ_CLIENT" title="Updating LD Library Classpath for Tarball" >
+        <task xsi:type="configure" id="hdp_2_6_tez_tarball_ld_library" supports-patch="true"/>
+      </execute-stage>
+
+      <!-- MapR -->
+      <execute-stage service="MAPREDUCE2" component="MAPREDUCE2_CLIENT" title="Updating LD Library Classpath for Tarball">
+        <task xsi:type="configure" id="hdp_2_6_mapreduce_tarball_ld_library" supports-patch="true"/>
+      </execute-stage>
     </group>
 
 

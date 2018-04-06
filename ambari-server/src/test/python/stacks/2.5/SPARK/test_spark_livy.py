@@ -25,6 +25,7 @@ from only_for_platform import not_for_platform, PLATFORM_WINDOWS
 
 @not_for_platform(PLATFORM_WINDOWS)
 @patch("resource_management.libraries.functions.get_stack_version", new=MagicMock(return_value="2.5.0.0-1597"))
+@patch("resource_management.libraries.functions.get_user_call_output.get_user_call_output", new=MagicMock(return_value=(0,'12345','')))
 class TestSparkClient(RMFTestCase):
     COMMON_SERVICES_PACKAGE_DIR = "SPARK/1.2.1/package"
     STACK_VERSION = "2.5"
@@ -56,7 +57,7 @@ class TestSparkClient(RMFTestCase):
         self.assertResourceCalled('HdfsResource', '/user/livy',
                                   immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
                                   security_enabled = False,
-                                  hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+                                  hadoop_bin_dir = '/usr/hdp/2.5.0.0-1235/hadoop/bin',
                                   keytab = UnknownConfigurationMock(),
                                   default_fs = 'hdfs://c6401.ambari.apache.org:8020',
                                   hdfs_site = {u'a': u'b'},
@@ -64,7 +65,7 @@ class TestSparkClient(RMFTestCase):
                                   principal_name = UnknownConfigurationMock(),
                                   user = 'hdfs',
                                   owner = 'livy',
-                                  hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                                  hadoop_conf_dir = '/usr/hdp/2.5.0.0-1235/hadoop/conf',
                                   type = 'directory',
                                   action = ['create_on_execute'], hdfs_resource_ignore_file='/var/lib/ambari-agent/data/.hdfs_resource_ignore',
                                   dfs_type = '',
@@ -73,7 +74,7 @@ class TestSparkClient(RMFTestCase):
         self.assertResourceCalled('HdfsResource', None,
                                   immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
                                   security_enabled = False,
-                                  hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+                                  hadoop_bin_dir = '/usr/hdp/2.5.0.0-1235/hadoop/bin',
                                   keytab = UnknownConfigurationMock(),
                                   default_fs = 'hdfs://c6401.ambari.apache.org:8020',
                                   hdfs_site = {u'a': u'b'},
@@ -82,12 +83,12 @@ class TestSparkClient(RMFTestCase):
                                   user = 'hdfs',
                                   action = ['execute'], hdfs_resource_ignore_file='/var/lib/ambari-agent/data/.hdfs_resource_ignore',
                                   dfs_type = '',
-                                  hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                                  hadoop_conf_dir = '/usr/hdp/2.5.0.0-1235/hadoop/conf',
                                   )
         self.assertResourceCalled('HdfsResource', '/livy-recovery',
                                   immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
                                   security_enabled = False,
-                                  hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+                                  hadoop_bin_dir = '/usr/hdp/2.5.0.0-1235/hadoop/bin',
                                   keytab = UnknownConfigurationMock(),
                                   default_fs = 'hdfs://c6401.ambari.apache.org:8020',
                                   hdfs_site = {u'a': u'b'},
@@ -95,7 +96,7 @@ class TestSparkClient(RMFTestCase):
                                   principal_name = UnknownConfigurationMock(),
                                   user = 'hdfs',
                                   owner = 'livy',
-                                  hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                                  hadoop_conf_dir = '/usr/hdp/2.5.0.0-1235/hadoop/conf',
                                   type = 'directory',
                                   action = ['create_on_execute'], hdfs_resource_ignore_file='/var/lib/ambari-agent/data/.hdfs_resource_ignore',
                                   dfs_type = '',
@@ -104,7 +105,7 @@ class TestSparkClient(RMFTestCase):
         self.assertResourceCalled('HdfsResource', None,
                                   immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
                                   security_enabled = False,
-                                  hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+                                  hadoop_bin_dir = '/usr/hdp/2.5.0.0-1235/hadoop/bin',
                                   keytab = UnknownConfigurationMock(),
                                   default_fs = 'hdfs://c6401.ambari.apache.org:8020',
                                   hdfs_site = {u'a': u'b'},
@@ -113,7 +114,7 @@ class TestSparkClient(RMFTestCase):
                                   user = 'hdfs',
                                   action = ['execute'], hdfs_resource_ignore_file='/var/lib/ambari-agent/data/.hdfs_resource_ignore',
                                   dfs_type = '',
-                                  hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                                  hadoop_conf_dir = '/usr/hdp/2.5.0.0-1235/hadoop/conf',
                                   )
         self.assertResourceCalled('File', '/usr/hdp/current/livy-server/conf/livy-env.sh',
                                   content = InlineTemplate(self.getConfig()['configurations']['livy-env']['content']),
@@ -146,6 +147,6 @@ class TestSparkClient(RMFTestCase):
                                   )
         self.assertResourceCalled('Execute', '/usr/hdp/current/livy-server/bin/livy-server start',
                                   environment = {'JAVA_HOME': '/usr/jdk64/jdk1.7.0_45'},
-                                  not_if = 'ls /var/run/livy/livy-livy-server.pid >/dev/null 2>&1 && ps -p `cat /var/run/livy/livy-livy-server.pid` >/dev/null 2>&1',
+                                  not_if = 'ls /var/run/livy/livy-livy-server.pid >/dev/null 2>&1 && ps -p 12345 >/dev/null 2>&1',
                                   user = 'livy'
                                   )

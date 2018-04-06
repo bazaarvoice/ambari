@@ -20,7 +20,6 @@ limitations under the License.
 
 import sys
 from resource_management import *
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 
 from hbase import hbase
@@ -28,24 +27,12 @@ from hbase import hbase
 
 class HbaseClient(Script):
 
-  def get_component_name(self):
-    return "hbase-client"
-
   def pre_upgrade_restart(self, env, upgrade_type=None):
     import params
     env.set_params(params)
 
     if params.version and compare_versions(format_stack_version(params.version), '4.0.0.0') >= 0:
-      conf_select.select(params.stack_name, "hbase", params.version)
-      stack_select.select("hbase-client", params.version)
-      #Execute(format("stack-select set hbase-client {version}"))
-
-      # set all of the hadoop clientss since hbase client is upgraded as part
-      # of the final "CLIENTS" group and we need to ensure that hadoop-client
-      # is also set
-      conf_select.select(params.stack_name, "hadoop", params.version)
-      stack_select.select("hadoop-client", params.version)
-      #Execute(format("stack-select set hadoop-client {version}"))
+      stack_select.select_packages(params.version)
 
   def install(self, env):
     self.install_packages(env)

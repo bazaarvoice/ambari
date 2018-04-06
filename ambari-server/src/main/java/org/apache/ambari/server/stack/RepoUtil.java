@@ -1,4 +1,4 @@
-  /**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,12 +26,15 @@ import java.util.Set;
 
 import javax.annotation.Nullable;
 
+import org.apache.ambari.annotations.Experimental;
+import org.apache.ambari.annotations.ExperimentalFeature;
 import org.apache.ambari.server.AmbariException;
 import org.apache.ambari.server.controller.RepositoryResponse;
 import org.apache.ambari.server.orm.entities.OperatingSystemEntity;
 import org.apache.ambari.server.orm.entities.RepositoryEntity;
 import org.apache.ambari.server.state.RepositoryInfo;
 import org.apache.ambari.server.state.stack.RepositoryXml;
+import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,7 +48,7 @@ import com.google.common.collect.Multimaps;
 import com.google.common.collect.Sets;
 
 /**
- * Utility functions for repository replated tasks.
+ * Utility functions for repository related tasks.
  */
 public class RepoUtil {
 
@@ -114,21 +117,25 @@ public class RepoUtil {
    *    service repository and will be added.
    * @param operatingSystems - A list of OperatingSystemEntity objects extracted from a RepositoryVersionEntity
    * @param stackReposByOs - Stack repositories loaded from the disk (including service repositories), grouped by os.
+   * @return {@code true} if there were added repositories
    */
-  public static void addServiceReposToOperatingSystemEntities(List<OperatingSystemEntity> operatingSystems,
+  @Experimental(feature = ExperimentalFeature.CUSTOM_SERVICE_REPOS,
+    comment = "Remove logic for handling custom service repos after enabling multi-mpack cluster deployment")
+  public static boolean addServiceReposToOperatingSystemEntities(List<OperatingSystemEntity> operatingSystems,
       ListMultimap<String, RepositoryInfo> stackReposByOs) {
     Set<String> addedRepos = new HashSet<>();
     for (OperatingSystemEntity os : operatingSystems) {
       List<RepositoryInfo> serviceReposForOs = stackReposByOs.get(os.getOsType());
       ImmutableSet<String> repoNames = ImmutableSet.copyOf(Lists.transform(os.getRepositories(), REPO_ENTITY_TO_NAME));
-      for (RepositoryInfo repoInfo : serviceReposForOs) {
+      for (RepositoryInfo repoInfo : serviceReposForOs)
         if (!repoNames.contains(repoInfo.getRepoName())) {
           os.getRepositories().add(toRepositoryEntity(repoInfo));
           addedRepos.add(String.format("%s (%s)", repoInfo.getRepoId(), os.getOsType()));
         }
-      }
     }
     LOG.info("Added {} service repos: {}", addedRepos.size(),Iterables.toString(addedRepos));
+
+    return CollectionUtils.isNotEmpty(addedRepos);
   }
 
   /**
@@ -139,6 +146,8 @@ public class RepoUtil {
    * @param stackReposByOs the repositories in the stack model (loaded from disks)
    * @return A list of service repositories
    */
+  @Experimental(feature = ExperimentalFeature.CUSTOM_SERVICE_REPOS,
+    comment = "Remove logic for handling custom service repos after enabling multi-mpack cluster deployment")
   public static List<RepositoryInfo> getServiceRepos(List<RepositoryInfo> vdfRepos,
                                                    ListMultimap<String, RepositoryInfo> stackReposByOs) {
     Set<String> serviceRepoIds = new HashSet<>();
@@ -181,11 +190,17 @@ public class RepoUtil {
     return responses;
   }
 
+  @Experimental(feature = ExperimentalFeature.CUSTOM_SERVICE_REPOS,
+    comment = "Remove logic for handling custom service repos after enabling multi-mpack cluster deployment")
   private static RepositoryEntity toRepositoryEntity(RepositoryInfo repoInfo) {
     RepositoryEntity re = new RepositoryEntity();
     re.setBaseUrl(repoInfo.getBaseUrl());
     re.setName(repoInfo.getRepoName());
     re.setRepositoryId(repoInfo.getRepoId());
+    re.setDistribution(repoInfo.getDistribution());
+    re.setComponents(repoInfo.getComponents());
+    re.setApplicableServices(repoInfo.getApplicableServices());
+    re.setTags(repoInfo.getTags());
     return re;
   }
 

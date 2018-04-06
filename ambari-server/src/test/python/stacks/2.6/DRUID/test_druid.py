@@ -31,7 +31,7 @@ from resource_management.core.logger import Logger
 @patch("resource_management.libraries.Script.get_tmp_dir", new=MagicMock(return_value=('/var/lib/ambari-agent/tmp')))
 @patch.object(functions, "get_stack_version", new=MagicMock(return_value="2.0.0.0-1234"))
 class TestDruid(RMFTestCase):
-  COMMON_SERVICES_PACKAGE_DIR = "DRUID/0.9.2/package"
+  COMMON_SERVICES_PACKAGE_DIR = "DRUID/0.10.1/package"
   STACK_VERSION = "2.6"
   DEFAULT_IMMUTABLE_PATHS = ['/apps/hive/warehouse', '/apps/falcon', '/mr-history/done', '/app-logs', '/tmp']
 
@@ -589,7 +589,7 @@ class TestDruid(RMFTestCase):
     self.assertResourceCalled('HdfsResource', '/user/druid',
                               immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
                               security_enabled = False,
-                              hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+                              hadoop_bin_dir = '/usr/hdp/2.5.0.0-1235/hadoop/bin',
                               keytab = UnknownConfigurationMock(),
                               default_fs = 'hdfs://c6401.ambari.apache.org:8020',
                               hdfs_site = {u'a': u'b'},
@@ -597,7 +597,8 @@ class TestDruid(RMFTestCase):
                               principal_name = 'missing_principal',
                               user = 'hdfs',
                               owner = 'druid',
-                              hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                              group='hadoop',
+                              hadoop_conf_dir = '/usr/hdp/2.5.0.0-1235/hadoop/conf',
                               type = 'directory',
                               action = ['create_on_execute'], hdfs_resource_ignore_file='/var/lib/ambari-agent/data/.hdfs_resource_ignore',
                               dfs_type = '',
@@ -608,7 +609,7 @@ class TestDruid(RMFTestCase):
     self.assertResourceCalled('HdfsResource', '/user/druid/data',
                               immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
                               security_enabled = False,
-                              hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+                              hadoop_bin_dir = '/usr/hdp/2.5.0.0-1235/hadoop/bin',
                               keytab = UnknownConfigurationMock(),
                               default_fs = 'hdfs://c6401.ambari.apache.org:8020',
                               hdfs_site = {u'a': u'b'},
@@ -616,15 +617,16 @@ class TestDruid(RMFTestCase):
                               principal_name = 'missing_principal',
                               user = 'hdfs',
                               owner = 'druid',
-                              hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                              hadoop_conf_dir = '/usr/hdp/2.5.0.0-1235/hadoop/conf',
                               type = 'directory',
                               action = ['create_on_execute'], hdfs_resource_ignore_file='/var/lib/ambari-agent/data/.hdfs_resource_ignore',
                               dfs_type = '',
-                              mode=0755
+                              group='hadoop',
+                              mode=0775
                               )
     self.assertResourceCalled('HdfsResource', '/tmp',
         security_enabled = False,
-        hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+        hadoop_bin_dir = '/usr/hdp/2.5.0.0-1235/hadoop/bin',
         keytab = UnknownConfigurationMock(),
         dfs_type = '',
         default_fs = 'hdfs://c6401.ambari.apache.org:8020',
@@ -634,7 +636,7 @@ class TestDruid(RMFTestCase):
         principal_name = 'missing_principal',
         user = 'hdfs',
         owner = 'hdfs',
-        hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+        hadoop_conf_dir = '/usr/hdp/2.5.0.0-1235/hadoop/conf',
         type = 'directory',
         action = ['create_on_execute'],
         immutable_paths = [u'/apps/hive/warehouse',
@@ -647,7 +649,7 @@ class TestDruid(RMFTestCase):
     self.assertResourceCalled('HdfsResource', '/tmp/druid-indexing',
                               immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
                               security_enabled = False,
-                              hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+                              hadoop_bin_dir = '/usr/hdp/2.5.0.0-1235/hadoop/bin',
                               keytab = UnknownConfigurationMock(),
                               default_fs = 'hdfs://c6401.ambari.apache.org:8020',
                               hdfs_site = {u'a': u'b'},
@@ -655,17 +657,18 @@ class TestDruid(RMFTestCase):
                               principal_name = 'missing_principal',
                               user = 'hdfs',
                               owner = 'druid',
-                              hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                              group='hadoop',
+                              hadoop_conf_dir = '/usr/hdp/2.5.0.0-1235/hadoop/conf',
                               type = 'directory',
                               action = ['create_on_execute'], hdfs_resource_ignore_file='/var/lib/ambari-agent/data/.hdfs_resource_ignore',
                               dfs_type = '',
-                              mode=0755
+                              mode=0775
                               )
 
     self.assertResourceCalled('HdfsResource', '/user/druid/logs',
                               immutable_paths = self.DEFAULT_IMMUTABLE_PATHS,
                               security_enabled = False,
-                              hadoop_bin_dir = '/usr/hdp/current/hadoop-client/bin',
+                              hadoop_bin_dir = '/usr/hdp/2.5.0.0-1235/hadoop/bin',
                               keytab = UnknownConfigurationMock(),
                               default_fs = 'hdfs://c6401.ambari.apache.org:8020',
                               hdfs_site = {u'a': u'b'},
@@ -673,7 +676,8 @@ class TestDruid(RMFTestCase):
                               principal_name = 'missing_principal',
                               user = 'hdfs',
                               owner = 'druid',
-                              hadoop_conf_dir = '/usr/hdp/current/hadoop-client/conf',
+                              group='hadoop',
+                              hadoop_conf_dir = '/usr/hdp/2.5.0.0-1235/hadoop/conf',
                               type = 'directory',
                               action = ['create_on_execute'], hdfs_resource_ignore_file='/var/lib/ambari-agent/data/.hdfs_resource_ignore',
                               dfs_type = '',

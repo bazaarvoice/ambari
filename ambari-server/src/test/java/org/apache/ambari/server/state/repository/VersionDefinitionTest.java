@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,6 +17,9 @@
  */
 package org.apache.ambari.server.state.repository;
 
+import static org.easymock.EasyMock.createNiceMock;
+import static org.easymock.EasyMock.expect;
+import static org.easymock.EasyMock.replay;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -25,16 +28,29 @@ import static org.junit.Assert.assertTrue;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import org.apache.ambari.server.orm.entities.RepositoryVersionEntity;
+import org.apache.ambari.server.state.Cluster;
+import org.apache.ambari.server.state.ComponentInfo;
 import org.apache.ambari.server.state.RepositoryType;
+import org.apache.ambari.server.state.Service;
 import org.apache.ambari.server.state.ServiceInfo;
 import org.apache.ambari.server.state.StackInfo;
+import org.apache.ambari.server.state.stack.RepoTag;
 import org.apache.ambari.server.state.stack.RepositoryXml;
+import org.apache.ambari.server.state.stack.RepositoryXml.Os;
+import org.apache.ambari.server.state.stack.RepositoryXml.Repo;
 import org.apache.commons.io.FileUtils;
 import org.junit.Test;
+
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 /**
  * Tests for repository definitions.
@@ -176,15 +192,41 @@ public class VersionDefinitionTest {
   public void testSerialization() throws Exception {
 
     File f = new File("src/test/resources/version_definition_test_all_services.xml");
-
     VersionDefinitionXml xml = VersionDefinitionXml.load(f.toURI().toURL());
-
     String xmlString = xml.toXml();
-
     xml = VersionDefinitionXml.load(xmlString);
 
     assertNotNull(xml.release.build);
     assertEquals("1234", xml.release.build);
+
+    f = new File("src/test/resources/version_definition_with_tags.xml");
+    xml = VersionDefinitionXml.load(f.toURI().toURL());
+    xmlString = xml.toXml();
+
+    xml = VersionDefinitionXml.load(xmlString);
+
+    assertEquals(2, xml.repositoryInfo.getOses().size());
+    List<Repo> repos = null;
+    for (Os os : xml.repositoryInfo.getOses()) {
+      if (os.getFamily().equals("redhat6")) {
+        repos = os.getRepos();
+      }
+    }
+    assertNotNull(repos);
+    assertEquals(3, repos.size());
+
+    Repo found = null;
+    for (Repo repo : repos) {
+      if (repo.getRepoName().equals("HDP-GPL")) {
+        found = repo;
+        break;
+      }
+    }
+
+    assertNotNull(found);
+    assertNotNull(found.getTags());
+    assertEquals(1, found.getTags().size());
+    assertEquals(RepoTag.GPL, found.getTags().iterator().next());
   }
 
 
@@ -308,9 +350,214 @@ public class VersionDefinitionTest {
     assertNotNull(xml.getPackageVersion("redhat6"));
     assertEquals("2_3_4_0_3396", xml.getPackageVersion("redhat6"));
     assertNull(xml.getPackageVersion("suse11"));
-
   }
 
+  @Test
+  public void testMaintVersion() throws Exception {
+    File f = new File("src/test/resources/version_definition_test_maint.xml");
+
+    VersionDefinitionXml xml = VersionDefinitionXml.load(f.toURI().toURL());
+
+    String xmlString = xml.toXml();
+
+    xml = VersionDefinitionXml.load(xmlString);
+
+    assertEquals(RepositoryType.MAINT, xml.release.repositoryType);
+    assertEquals("2.3.4.1", xml.release.version);
+    assertEquals("1234", xml.release.build);
+    assertEquals("redhat6", xml.repositoryInfo.getOses().get(0).getFamily());
+
+
+
+    List<AvailableServiceReference> availableServices = xml.availableServices;
+    assertEquals(3, availableServices.size());
+
+    List<ManifestService> manifestServices = xml.manifestServices;
+    assertEquals(4, manifestServices.size());
+
+    ManifestService hdfs = null;
+    ManifestService hive = null;
+    for (ManifestService as : manifestServices) {
+      if (as.serviceId.equals("HDFS-271")) {
+        hdfs = as;
+      } else if (as.serviceId.equals("HIVE-200")) {
+        hive = as;
+      }
+    }
+
+    assertNotNull(hdfs);
+    assertNotNull(hive);
+
+    assertEquals("2.3.4.0", hdfs.releaseVersion);
+    assertNull(hive.releaseVersion);
+
+    StackInfo stack = new StackInfo() {
+      @Override
+      public ServiceInfo getService(String name) {
+        return makeService("HIVE", "HIVE_METASTORE");
+      }
+    };
+
+    Collection<AvailableService> availables = xml.getAvailableServices(stack);
+
+    assertEquals(2, availables.size());
+
+    boolean found = false;
+    for (AvailableService available : availables) {
+      if (available.getName().equals("HIVE")) {
+        found = true;
+        assertEquals(2, available.getVersions().size());
+        for (AvailableVersion version : available.getVersions()) {
+          if (version.getVersion().equals("1.1.0")) {
+            assertEquals("1.0.9", version.getReleaseVersion());
+          } else {
+            assertNull(version.getReleaseVersion());
+          }
+        }
+      }
+    }
+
+    assertTrue("Found available version for HIVE", found);
+  }
+
+  @Test
+  public void testAvailableFull() throws Exception {
+
+    Cluster cluster = createNiceMock(Cluster.class);
+    RepositoryVersionEntity repositoryVersion = createNiceMock(RepositoryVersionEntity.class);
+    expect(repositoryVersion.getVersion()).andReturn("2.3.4.0").atLeastOnce();
+
+    Service serviceHdfs = createNiceMock(Service.class);
+    expect(serviceHdfs.getName()).andReturn("HDFS").atLeastOnce();
+    expect(serviceHdfs.getDisplayName()).andReturn("HDFS").atLeastOnce();
+    expect(serviceHdfs.getDesiredRepositoryVersion()).andReturn(repositoryVersion).atLeastOnce();
+
+    Service serviceHBase = createNiceMock(Service.class);
+    expect(serviceHBase.getName()).andReturn("HBASE").atLeastOnce();
+    expect(serviceHBase.getDisplayName()).andReturn("HBase").atLeastOnce();
+    expect(serviceHBase.getDesiredRepositoryVersion()).andReturn(repositoryVersion).atLeastOnce();
+
+    // !!! should never be accessed as it's not in any VDF
+    Service serviceAMS = createNiceMock(Service.class);
+
+    expect(cluster.getServices()).andReturn(ImmutableMap.<String, Service>builder()
+        .put("HDFS", serviceHdfs)
+        .put("HBASE", serviceHBase)
+        .put("AMBARI_METRICS", serviceAMS).build()).atLeastOnce();
+
+
+    replay(cluster, repositoryVersion, serviceHdfs, serviceHBase);
+
+    File f = new File("src/test/resources/version_definition_test_all_services.xml");
+    VersionDefinitionXml xml = VersionDefinitionXml.load(f.toURI().toURL());
+    ClusterVersionSummary summary = xml.getClusterSummary(cluster);
+    assertEquals(2, summary.getAvailableServiceNames().size());
+
+    f = new File("src/test/resources/version_definition_test_maint.xml");
+    xml = VersionDefinitionXml.load(f.toURI().toURL());
+    summary = xml.getClusterSummary(cluster);
+    assertEquals(0, summary.getAvailableServiceNames().size());
+
+    f = new File("src/test/resources/version_definition_test_maint.xml");
+    xml = VersionDefinitionXml.load(f.toURI().toURL());
+    xml.release.repositoryType = RepositoryType.STANDARD;
+    xml.availableServices = Collections.emptyList();
+    summary = xml.getClusterSummary(cluster);
+    assertEquals(2, summary.getAvailableServiceNames().size());
+
+    f = new File("src/test/resources/version_definition_test_maint_partial.xml");
+    xml = VersionDefinitionXml.load(f.toURI().toURL());
+    summary = xml.getClusterSummary(cluster);
+    assertEquals(1, summary.getAvailableServiceNames().size());
+  }
+
+  @Test
+  public void testAvailableBuildVersion() throws Exception {
+
+    Cluster cluster = createNiceMock(Cluster.class);
+    RepositoryVersionEntity repositoryVersion = createNiceMock(RepositoryVersionEntity.class);
+    expect(repositoryVersion.getVersion()).andReturn("2.3.4.1-1").atLeastOnce();
+
+    Service serviceHdfs = createNiceMock(Service.class);
+    expect(serviceHdfs.getName()).andReturn("HDFS").atLeastOnce();
+    expect(serviceHdfs.getDisplayName()).andReturn("HDFS").atLeastOnce();
+    expect(serviceHdfs.getDesiredRepositoryVersion()).andReturn(repositoryVersion).atLeastOnce();
+
+    Service serviceHBase = createNiceMock(Service.class);
+    expect(serviceHBase.getName()).andReturn("HBASE").atLeastOnce();
+    expect(serviceHBase.getDisplayName()).andReturn("HBase").atLeastOnce();
+    expect(serviceHBase.getDesiredRepositoryVersion()).andReturn(repositoryVersion).atLeastOnce();
+
+    // !!! should never be accessed as it's not in any VDF
+    Service serviceAMS = createNiceMock(Service.class);
+
+    expect(cluster.getServices()).andReturn(ImmutableMap.<String, Service>builder()
+        .put("HDFS", serviceHdfs)
+        .put("HBASE", serviceHBase)
+        .put("AMBARI_METRICS", serviceAMS).build()).atLeastOnce();
+
+    replay(cluster, repositoryVersion, serviceHdfs, serviceHBase);
+
+    File f = new File("src/test/resources/version_definition_test_maint_partial.xml");
+    VersionDefinitionXml xml = VersionDefinitionXml.load(f.toURI().toURL());
+    xml.release.version = "2.3.4.1";
+    xml.release.build = "2";
+    ClusterVersionSummary summary = xml.getClusterSummary(cluster);
+    assertEquals(1, summary.getAvailableServiceNames().size());
+  }
+
+  /**
+   * Tests that patch upgrade dependencies can be calculated recursively.
+   *
+   * @throws Exception
+   */
+  @Test
+  public void testRecursiveDependencyDetection() throws Exception {
+    File f = new File("src/test/resources/version_definition_test_all_services.xml");
+    VersionDefinitionXml xml = VersionDefinitionXml.load(f.toURI().toURL());
+
+    Map<String, List<String>> dependencies = new HashMap<>();
+    dependencies.put("A", Lists.newArrayList("B", "X"));
+    dependencies.put("B", Lists.newArrayList("C", "D", "E"));
+    dependencies.put("E", Lists.newArrayList("A", "F"));
+    dependencies.put("F", Lists.newArrayList("B", "E"));
+
+    // services not installed
+    dependencies.put("X", Lists.newArrayList("Y", "Z", "A"));
+    dependencies.put("Z", Lists.newArrayList("B"));
+
+    Set<String> installedServices = Sets.newHashSet("A", "B", "C", "D", "E", "F", "G", "H");
+
+    Set<String> servicesInUpgrade = Sets.newHashSet("A");
+
+    Set<String> results = xml.getRecursiveDependencies(Sets.newHashSet("B"), dependencies,
+        servicesInUpgrade, installedServices);
+
+    assertEquals(5, results.size());
+    assertTrue(results.contains("B"));
+    assertTrue(results.contains("C"));
+    assertTrue(results.contains("D"));
+    assertTrue(results.contains("E"));
+    assertTrue(results.contains("F"));
+
+    servicesInUpgrade = Sets.newHashSet("A", "B", "C", "E", "F");
+    results = xml.getRecursiveDependencies(Sets.newHashSet("D"), dependencies, servicesInUpgrade,
+        installedServices);
+
+    assertEquals(1, results.size());
+    assertTrue(results.contains("D"));
+
+    servicesInUpgrade = Sets.newHashSet("A", "F");
+    results = xml.getRecursiveDependencies(Sets.newHashSet("B", "E"), dependencies,
+        servicesInUpgrade,
+        installedServices);
+
+    assertEquals(4, results.size());
+    assertTrue(results.contains("B"));
+    assertTrue(results.contains("C"));
+    assertTrue(results.contains("D"));
+    assertTrue(results.contains("E"));
+  }
 
   private static ServiceInfo makeService(final String name) {
     return new ServiceInfo() {
@@ -329,6 +576,33 @@ public class VersionDefinitionTest {
       @Override
       public String getComment() {
         return name + " Comment";
+      }
+
+    };
+  }
+
+  private static ServiceInfo makeService(final String name, final String component) {
+    return new ServiceInfo() {
+      @Override
+      public String getName() {
+        return name;
+      }
+      @Override
+      public String getDisplayName() {
+        return name + " Display";
+      }
+      @Override
+      public String getVersion() {
+        return "1.1.1";
+      }
+      @Override
+      public String getComment() {
+        return name + " Comment";
+      }
+
+      @Override
+      public ComponentInfo getComponentByName(String name) {
+        return null;
       }
 
     };

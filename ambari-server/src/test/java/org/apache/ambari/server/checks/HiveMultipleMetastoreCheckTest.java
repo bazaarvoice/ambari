@@ -23,32 +23,52 @@ import java.util.Map;
 
 import org.apache.ambari.server.configuration.Configuration;
 import org.apache.ambari.server.controller.PrereqCheckRequest;
+import org.apache.ambari.server.orm.entities.RepositoryVersionEntity;
 import org.apache.ambari.server.state.Cluster;
 import org.apache.ambari.server.state.Clusters;
+import org.apache.ambari.server.state.RepositoryType;
 import org.apache.ambari.server.state.Service;
 import org.apache.ambari.server.state.ServiceComponent;
 import org.apache.ambari.server.state.ServiceComponentHost;
+import org.apache.ambari.server.state.StackId;
+import org.apache.ambari.server.state.repository.ClusterVersionSummary;
+import org.apache.ambari.server.state.repository.VersionDefinitionXml;
 import org.apache.ambari.server.state.stack.PrereqCheckStatus;
 import org.apache.ambari.server.state.stack.PrerequisiteCheck;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.runners.MockitoJUnitRunner;
 
 import com.google.inject.Provider;
 
 /**
  * Tests {@link HiveMultipleMetastoreCheck}
  */
+@RunWith(MockitoJUnitRunner.class)
 public class HiveMultipleMetastoreCheckTest {
   private final Clusters m_clusters = Mockito.mock(Clusters.class);
   private final HiveMultipleMetastoreCheck m_check = new HiveMultipleMetastoreCheck();
+
+  @Mock
+  private ClusterVersionSummary m_clusterVersionSummary;
+
+  @Mock
+  private VersionDefinitionXml m_vdfXml;
+
+  @Mock
+  private RepositoryVersionEntity m_repositoryVersion;
+
+  final Map<String, Service> m_services = new HashMap<>();
 
   /**
    *
    */
   @Before
-  public void setup() {
+  public void setup() throws Exception {
     m_check.clustersProvider = new Provider<Clusters>() {
 
       @Override
@@ -58,6 +78,16 @@ public class HiveMultipleMetastoreCheckTest {
     };
     Configuration config = Mockito.mock(Configuration.class);
     m_check.config = config;
+
+    Mockito.when(m_repositoryVersion.getVersion()).thenReturn("1.0.0.0-1234");
+    Mockito.when(m_repositoryVersion.getStackId()).thenReturn(new StackId("HDP", "1.0"));
+
+    m_services.clear();
+
+    Mockito.when(m_repositoryVersion.getType()).thenReturn(RepositoryType.STANDARD);
+    Mockito.when(m_repositoryVersion.getRepositoryXml()).thenReturn(m_vdfXml);
+    Mockito.when(m_vdfXml.getClusterSummary(Mockito.any(Cluster.class))).thenReturn(m_clusterVersionSummary);
+    Mockito.when(m_clusterVersionSummary.getAvailableServiceNames()).thenReturn(m_services.keySet());
   }
 
   /**
@@ -71,19 +101,18 @@ public class HiveMultipleMetastoreCheckTest {
 
     Mockito.when(cluster.getClusterId()).thenReturn(1L);
     Mockito.when(m_clusters.getCluster("cluster")).thenReturn(cluster);
-    Map<String, Service> services = new HashMap<String, Service>();
-    Mockito.when(cluster.getServices()).thenReturn(services);
+    Mockito.when(cluster.getServices()).thenReturn(m_services);
 
-    services.put("HDFS", Mockito.mock(Service.class));
+    m_services.put("HDFS", Mockito.mock(Service.class));
 
     PrereqCheckRequest request = new PrereqCheckRequest("cluster");
-    request.setRepositoryVersion("2.3.0.0");
+    request.setTargetRepositoryVersion(m_repositoryVersion);
 
     // HIVE not installed
     Assert.assertFalse(m_check.isApplicable(request));
 
     // install HIVE
-    services.put("HIVE", Mockito.mock(Service.class));
+    m_services.put("HIVE", Mockito.mock(Service.class));
 
     // HIVE installed
     Assert.assertTrue(m_check.isApplicable(request));
@@ -107,12 +136,12 @@ public class HiveMultipleMetastoreCheckTest {
 
     Mockito.when(hive.getServiceComponent("HIVE_METASTORE")).thenReturn(metastore);
 
-    Map<String, ServiceComponentHost> metastores = new HashMap<String, ServiceComponentHost>();
+    Map<String, ServiceComponentHost> metastores = new HashMap<>();
     Mockito.when(metastore.getServiceComponentHosts()).thenReturn(metastores);
 
     PrerequisiteCheck check = new PrerequisiteCheck(null, null);
     PrereqCheckRequest request = new PrereqCheckRequest("cluster");
-    request.setRepositoryVersion("2.3.0.0");
+    request.setTargetRepositoryVersion(m_repositoryVersion);
     m_check.perform(check, request);
 
     Assert.assertEquals(PrereqCheckStatus.WARNING, check.getStatus());
@@ -129,10 +158,10 @@ public class HiveMultipleMetastoreCheckTest {
   @Test
   public void testPerformFail() throws Exception{
     final Cluster cluster = Mockito.mock(Cluster.class);
-    final LinkedHashSet<String> failedOnExpected = new LinkedHashSet<String>();
+    final LinkedHashSet<String> failedOnExpected = new LinkedHashSet<>();
     Service hive = Mockito.mock(Service.class);
     ServiceComponent metastore = Mockito.mock(ServiceComponent.class);
-    Map<String, ServiceComponentHost> metastores = new HashMap<String, ServiceComponentHost>();
+    Map<String, ServiceComponentHost> metastores = new HashMap<>();
 
     failedOnExpected.add("HIVE");
 
@@ -144,7 +173,7 @@ public class HiveMultipleMetastoreCheckTest {
 
     PrerequisiteCheck check = new PrerequisiteCheck(null, null);
     PrereqCheckRequest request = new PrereqCheckRequest("cluster");
-    request.setRepositoryVersion("2.3.0.0");
+    request.setTargetRepositoryVersion(m_repositoryVersion);
     m_check.perform(check, request);
 
     Assert.assertEquals(PrereqCheckStatus.WARNING, check.getStatus());

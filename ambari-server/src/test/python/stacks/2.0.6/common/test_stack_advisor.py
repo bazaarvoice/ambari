@@ -2146,7 +2146,7 @@ class TestHDP206StackAdvisor(TestCase):
                   'ams-hbase-env': {'properties': {'hbase_log_dir': '/var/log/ambari-metrics-collector',
                                                                                        'hbase_master_heapsize': '512',
                                                                                        'hbase_master_xmn_size': '102',
-                                                                                       'hbase_regionserver_heapsize': '768',
+                                                                                       'hbase_regionserver_heapsize': '1024',
                                                                                        'regionserver_xmn_size': '128'}},
                   'ams-hbase-site': {'properties': {'hbase.cluster.distributed': 'true',
                                                                                          'hbase.hregion.memstore.flush.size': '134217728',
@@ -2211,7 +2211,7 @@ class TestHDP206StackAdvisor(TestCase):
                   'ams-hbase-env': {'properties': {'hbase_log_dir': '/var/log/ambari-metrics-collector',
                                                                                        'hbase_master_heapsize': '512',
                                                                                        'hbase_master_xmn_size': '102',
-                                                                                       'hbase_regionserver_heapsize': '768',
+                                                                                       'hbase_regionserver_heapsize': '1024',
                                                                                        'regionserver_xmn_size': '128'}},
                   'ams-hbase-site': {'properties': {'hbase.cluster.distributed': 'true',
                                                                                          'hbase.hregion.memstore.flush.size': '134217728',
@@ -2354,6 +2354,39 @@ class TestHDP206StackAdvisor(TestCase):
                      'type': 'configuration'}]
 
     res = self.stackAdvisor.validateHDFSConfigurationsEnv(properties, recommendedDefaults, configurations, '', '')
+    self.assertEquals(res, res_expected)
+
+  def test_validateHDFSConfigurationsCoreSite(self):
+
+    configurations = {}
+    services = {"gpl-license-accepted": True, "services": [{"StackServices": {"service_name": "HDFS"}}]}
+
+    # 1) ok: gpl is allowed
+    properties = {'io.compression.codec.lzo.class': 'com.hadoop.compression.lzo.LzoCodec',
+                  'io.compression.codecs': 'AnotherCodec, com.hadoop.compression.lzo.LzoCodec'}
+    res_expected = []
+
+    res = self.stackAdvisor.validateHDFSConfigurationsCoreSite(properties, {}, configurations, services, '')
+    self.assertEquals(res, res_expected)
+
+    # 2) fail: gpl is not allowed
+    services["gpl-license-accepted"] = False
+    res_expected = [{'config-type': 'core-site',
+                     'message': 'Your Ambari Server has not been configured to download LZO and install it. '
+                                'LZO is GPL software and requires you to explicitly enable Ambari to install and download LZO. '
+                                'Please refer to the documentation to configure Ambari before proceeding.',
+                     'type': 'configuration',
+                     'config-name': 'io.compression.codecs',
+                     'level': 'NOT_APPLICABLE'},
+                    {'config-type': 'core-site',
+                     'message': 'Your Ambari Server has not been configured to download LZO and install it. '
+                                'LZO is GPL software and requires you to explicitly enable Ambari to install and download LZO. '
+                                'Please refer to the documentation to configure Ambari before proceeding.',
+                     'type': 'configuration',
+                     'config-name': 'io.compression.codec.lzo.class',
+                     'level': 'NOT_APPLICABLE'}]
+
+    res = self.stackAdvisor.validateHDFSConfigurationsCoreSite(properties, {}, configurations, services, '')
     self.assertEquals(res, res_expected)
 
   def test_validateOneDataDirPerPartition(self):

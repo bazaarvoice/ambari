@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,6 +20,7 @@ package org.apache.ambari.server.api.services.stackadvisor;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -28,7 +29,6 @@ import java.util.Set;
 
 import org.apache.ambari.server.api.services.stackadvisor.recommendations.RecommendationResponse;
 import org.apache.ambari.server.state.ChangedConfigInfo;
-import org.apache.ambari.server.state.PropertyDependencyInfo;
 import org.apache.commons.lang.StringUtils;
 
 /**
@@ -40,7 +40,7 @@ public class StackAdvisorRequest {
   private String stackVersion;
   private StackAdvisorRequestType requestType;
   private List<String> hosts = new ArrayList<String>();
-  private List<String> services = new ArrayList<String>();
+  private Collection<String> services = new ArrayList<String>();
   private Map<String, Set<String>> componentHostsMap = new HashMap<String, Set<String>>();
   private Map<String, Set<String>> hostComponents = new HashMap<String, Set<String>>();
   private Map<String, Set<String>> hostGroupBindings = new HashMap<String, Set<String>>();
@@ -48,6 +48,7 @@ public class StackAdvisorRequest {
   private List<ChangedConfigInfo> changedConfigurations = new LinkedList<ChangedConfigInfo>();
   private Set<RecommendationResponse.ConfigGroup> configGroups;
   private Map<String, String> userContext = new HashMap<String, String>();
+  private Boolean gplLicenseAccepted;
 
   public String getStackName() {
     return stackName;
@@ -65,7 +66,7 @@ public class StackAdvisorRequest {
     return hosts;
   }
 
-  public List<String> getServices() {
+  public Collection<String> getServices() {
     return services;
   }
 
@@ -117,6 +118,13 @@ public class StackAdvisorRequest {
     this.configGroups = configGroups;
   }
 
+  /**
+   * @return true if GPL license is accepted, false otherwise
+   */
+  public Boolean getGplLicenseAccepted() {
+    return gplLicenseAccepted;
+  }
+
   private StackAdvisorRequest(String stackName, String stackVersion) {
     this.stackName = stackName;
     this.stackVersion = stackVersion;
@@ -143,7 +151,7 @@ public class StackAdvisorRequest {
       return this;
     }
 
-    public StackAdvisorRequestBuilder forServices(List<String> services) {
+    public StackAdvisorRequestBuilder forServices(Collection<String> services) {
       this.instance.services = services;
       return this;
     }
@@ -186,6 +194,17 @@ public class StackAdvisorRequest {
     public StackAdvisorRequestBuilder withConfigGroups(
       Set<RecommendationResponse.ConfigGroup> configGroups) {
       this.instance.configGroups = configGroups;
+      return this;
+    }
+
+    /**
+     * Set GPL license acceptance parameter to request.
+     * @param gplLicenseAccepted is GPL license accepted.
+     * @return stack advisor request builder.
+     */
+    public StackAdvisorRequestBuilder withGPLLicenseAccepted(
+        Boolean gplLicenseAccepted) {
+      this.instance.gplLicenseAccepted = gplLicenseAccepted;
       return this;
     }
 

@@ -322,7 +322,7 @@ describe('App.upgradeWizardView', function () {
           failedItem: null,
           runningItem: null,
           manualItem: null,
-          upgradeState: 'INIT'
+          upgradeState: 'NOT_REQUIRED'
         },
         result: false
       },
@@ -544,7 +544,7 @@ describe('App.upgradeWizardView', function () {
           status: '',
           isDowngrade: false
         },
-        result: ''
+        result: Em.I18n.t('admin.stackUpgrade.state.init')
       },
       {
         data: {
@@ -868,6 +868,22 @@ describe('App.upgradeWizardView', function () {
       expect(view.get('controller.areSlaveComponentFailuresHostsLoaded')).to.be.true;
     });
   });
+  it("isSlaveComponentFailuresItem must be true when status is OUT_OF_SYNC", function () {
+    view.reopen({
+      activeStatuses: ['OUT_OF_SYNC'],
+      upgradeGroups: [Em.Object.create({
+        status: 'OUT_OF_SYNC'
+      })]
+    });
+    view.propertyDidChange('activeGroup');
+    view.set('activeGroup.upgradeItems', [Em.Object.create({
+      context: view.get("controller.slaveFailuresContext"),
+      status: 'OUT_OF_SYNC'
+    })]);
+
+    expect(view.get('isSlaveComponentFailuresItem')).to.be.true;
+    expect(view.get('isOutOfSync')).to.be.true;
+  });
 
   describe("#getServiceCheckItem()", function() {
     beforeEach(function () {
@@ -897,6 +913,44 @@ describe('App.upgradeWizardView', function () {
       expect(view.get('controller').getUpgradeItem.calledOnce).to.be.true;
       expect(view.get('controller.areServiceCheckFailuresServicenamesLoaded')).to.be.true;
     });
+  });
+
+  describe("#canSkipFailedItem()", function() {
+    beforeEach(function () {
+      view.reopen({'failedItem': Em.Object.create({skippable: true}) });
+      view.set('controller.upgradeData.Upgrade', {associated_version: '2.1.1'});
+      var findResult = [Em.Object.create({repositoryVersion: '2.1.1', isPatch: true})];
+      sinon.stub(App.RepositoryVersion, 'find', function(){
+        return findResult;
+      });
+    });
+
+    afterEach(function () {
+      App.RepositoryVersion.find.restore();
+    })
+    it("Should return true if can not find upgrade", function () {
+      view.propertyDidChange('canSkipFailedItem');
+      expect(view.get('canSkipFailedItem')).to.be.true;
+    });
+
+    it("Should return false if upgrade is patch or maint and item is final", function () {
+      view.reopen({
+        isFinalizeItem: true
+      });
+      view.propertyDidChange('canSkipFailedItem');
+      expect(view.get('canSkipFailedItem')).to.be.false;
+    });
+
+    it("Should return true if upgrade is patch or maint and item is not final", function () {
+
+      view.reopen({
+        isFinalizeItem: false
+      });
+      view.propertyDidChange('canSkipFailedItem');
+
+      expect(view.get('canSkipFailedItem')).to.be.true;
+    });
+
   });
 
 });

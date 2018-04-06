@@ -34,6 +34,8 @@
     <check>org.apache.ambari.server.checks.YarnRMHighAvailabilityCheck</check>
     <check>org.apache.ambari.server.checks.YarnTimelineServerStatePreservingCheck</check>
     <check>org.apache.ambari.server.checks.RangerSSLConfigCheck</check>
+    <check>org.apache.ambari.server.checks.DruidHighAvailabilityCheck</check>
+    <check>org.apache.ambari.server.checks.LZOCheck</check>
 
     <configuration>
       <!-- Configuration properties for all pre-reqs including required pre-reqs -->
@@ -148,6 +150,18 @@
       </execute-stage>
     </group>
 
+    <!--
+    After processing this group, items declared to be preconfigured will be applied to the existing
+    configurations.
+    -->
+    <group xsi:type="cluster" name="PRECONFIGURE_COMMON_KERBEROS_PROPERTIES" title="Preconfigure Kerberos-related properties">
+      <condition xsi:type="security" type="kerberos"/>
+      <direction>UPGRADE</direction>
+      <execute-stage title="Preconfigure Kerberos-related properties">
+        <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.PreconfigureKerberosAction"/>
+      </execute-stage>
+    </group>
+
     <group name="CORE_MASTER" title="Core Masters">
       <service-check>false</service-check>
       <service name="HDFS">
@@ -169,7 +183,7 @@
         <component>HBASE_MASTER</component>
       </service>
     </group>
-    
+
     <group name="SERVICE_CHECK_1" title="All Service Checks" xsi:type="service-check">
       <direction>UPGRADE</direction>
       <skippable>true</skippable>
@@ -185,7 +199,7 @@
         <service>LOGSEARCH</service>
       </exclude>
     </group>
-    
+
     <group name="CORE_SLAVES" title="Core Slaves" xsi:type="colocated">
       <service-check>false</service-check>
       <skippable>true</skippable>
@@ -193,7 +207,7 @@
         <component>DATANODE</component>
         <component>NFS_GATEWAY</component>
       </service>
-      
+
       <service name="HBASE">
         <component>HBASE_REGIONSERVER</component>
         <component>PHOENIX_QUERY_SERVER</component>
@@ -209,7 +223,7 @@
         <message>The initial batch of {{components}} hosts have been {{direction.past}}. You are advised to check the hosts and perform cluster/workload-specific tests against your cluster to ensure proper operation before proceeding with {{direction.text}} of the remaining services.</message>
       </batch>
     </group>
-    
+
     <group name="SERVICE_CHECK_2" title="All Service Checks" xsi:type="service-check">
       <direction>UPGRADE</direction>
       <skippable>true</skippable>
@@ -444,7 +458,7 @@
 
     <group xsi:type="cluster" name="FINALIZE_PRE_CHECK" title="Finalize {{direction.text.proper}} Pre-Check">
       <direction>UPGRADE</direction>
-      
+
       <execute-stage title="Check Component Versions">
         <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.ComponentVersionCheckAction" />
       </execute-stage>
@@ -453,7 +467,7 @@
     <group xsi:type="cluster" name="POST_CLUSTER" title="Finalize {{direction.text.proper}}">
       <skippable>true</skippable>
       <supports-auto-skip-failure>false</supports-auto-skip-failure>
-      
+
       <execute-stage title="Confirm Finalize">
         <direction>UPGRADE</direction>
         <task xsi:type="manual">
@@ -477,7 +491,7 @@
           <function>finalize_rolling_upgrade</function>
         </task>
       </execute-stage>
-      
+
       <execute-stage title="Save Cluster State">
         <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.FinalizeUpgradeAction">
         </task>
@@ -563,7 +577,7 @@
             <function>configure_atlas_user_for_tagsync</function>
           </task>
         </pre-upgrade>
-        
+
         <pre-downgrade copy-upgrade="true" />
 
         <upgrade>
@@ -654,7 +668,7 @@
         </upgrade>
       </component>
     </service>
-    
+
     <service name="SLIDER">
       <component name="SLIDER">
         <upgrade>
@@ -677,7 +691,7 @@
           </task>
           <task xsi:type="configure" id="hdp_2_6_0_0_mapreduce_job_queuename"/>
         </pre-upgrade>
-        
+
         <pre-downgrade copy-upgrade="true" />
 
         <upgrade>
@@ -708,11 +722,11 @@
           <task xsi:type="configure" id="yarn_site_retained_log_count" />
           <task xsi:type="configure" id="hdp_2_6_0_0_service_check_queue_name"/>
           <task xsi:type="configure" id="hdp_2_6_0_0_ats_scan_interval_default"/>
-          
+
           <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.FixCapacitySchedulerOrderingPolicy">
             <summary>Validate Root Queue Ordering Policy</summary>
           </task>
-          
+
         </pre-upgrade>
         <pre-downgrade />
         <upgrade>
@@ -771,9 +785,9 @@
           </task>
           <task xsi:type="configure" id="hdp_2_5_0_0_tez_queue_name"/>
         </pre-upgrade>
-        
+
         <pre-downgrade copy-upgrade="true" />
-        
+
         <upgrade>
           <task xsi:type="restart-task" />
         </upgrade>
@@ -848,10 +862,12 @@
           <task xsi:type="configure" id="llap_update_shuffle_parallel_copies"/>
           <task xsi:type="configure" id="llap_update_settings"/>
           <task xsi:type="configure" id="llap_update_tez_settings"/>
+          <task xsi:type="configure" id="hdp_2_6_maint_llap_config"/>
+          <task xsi:type="configure" id="llap_update_tez_shuffle_ssl_enable"/>
         </pre-upgrade>
-        
+
         <pre-downgrade />
-      
+
         <upgrade>
           <task xsi:type="restart-task" />
         </upgrade>
@@ -897,9 +913,9 @@
           <task xsi:type="configure" id="hdp_2_5_0_0_rename_spark_livy_configs" />
           <task xsi:type="configure" id="hdp_2_5_0_0_add_spark_conf_dir_livy_configs" />
         </pre-upgrade>
-        
+
         <pre-downgrade />
-        
+
         <upgrade>
           <task xsi:type="restart-task" />
         </upgrade>
@@ -917,11 +933,19 @@
 
     <service name="SPARK2">
       <component name="SPARK2_JOBHISTORYSERVER">
+        <pre-upgrade>
+          <task xsi:type="configure" id="hdp_2_5_0_0_spark2_jobhistoryserver_log4j"/>
+        </pre-upgrade>
+        <pre-downgrade />
         <upgrade>
           <task xsi:type="restart-task" />
         </upgrade>
       </component>
       <component name="SPARK2_THRIFTSERVER">
+        <pre-upgrade>
+          <task xsi:type="configure" id="hdp_2_5_0_0_spark2_thriftserver_log4j"/>
+        </pre-upgrade>
+        <pre-downgrade />
         <upgrade>
           <task xsi:type="restart-task" />
         </upgrade>
@@ -929,6 +953,7 @@
       <component name="SPARK2_CLIENT">
         <pre-upgrade>
           <task xsi:type="configure" id="hdp_2_5_0_0_spark2_yarn_queue"/>
+          <task xsi:type="configure" id="hdp_2_5_0_0_spark2_client_log4j"/>
         </pre-upgrade>
         <pre-downgrade/>
         <upgrade>
@@ -939,8 +964,16 @@
 
     <service name="ZEPPELIN">
       <component name="ZEPPELIN_MASTER">
+        <pre-upgrade>
+          <task xsi:type="configure" id="hdp_2_5_0_0__zeppelin_external_dependency_configs"/>
+          <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.FixNotebookStorage">
+            <summary>Adjusting Zeppelin Notebook properties</summary>
+          </task>
+        </pre-upgrade>
+        <pre-downgrade/>
+
         <upgrade>
-          <task xsi:type="restart-task" />
+          <task xsi:type="restart-task"/>
         </upgrade>
       </component>
     </service>
@@ -1031,6 +1064,7 @@
           <task xsi:type="configure" id="storm_worker_log4j_parameterize" />
           <task xsi:type="configure" id="storm_cluster_log4j_parameterize" />
           <task xsi:type="configure" id="storm_nimbus_autocred_config" />
+          <task xsi:type="configure" id="storm_remove_jmxetric"/>
         </pre-upgrade>
         <pre-downgrade/>
         <upgrade>
@@ -1103,6 +1137,10 @@
           <task xsi:type="configure" id="increase_atlas_zookeeper_timeouts"/>
           <task xsi:type="configure" id="atlas_env_gc_worker"/>
           <task xsi:type="configure" id="hdp_2_6_atlas_kafka_auto_commit_enable_property_delete"/>
+          <task xsi:type="configure" id="atlas_log4j_update_logger_settings"/>
+          <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.AtlasProxyUserConfigCalculation" >
+            <summary>Applying Atlas proxy-user configurations.</summary>
+          </task>
         </pre-upgrade>
         <pre-downgrade />
         <upgrade>

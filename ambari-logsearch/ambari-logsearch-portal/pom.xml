@@ -20,13 +20,13 @@
   <parent>
     <artifactId>ambari-logsearch</artifactId>
     <groupId>org.apache.ambari</groupId>
-    <version>2.5.2.0.0</version>
+    <version>2.6.1.0-100</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.ambari</groupId>
   <artifactId>ambari-logsearch-portal</artifactId>
   <packaging>jar</packaging>
-  <version>2.5.2.0.0</version>
+  <version>2.6.1.0-100</version>
   <url>http://maven.apache.org</url>
   <name>Ambari Logsearch Portal</name>
   <properties>
@@ -123,12 +123,12 @@
                   <goal>copy-dependencies</goal>
                 </goals>
                 <configuration>
-                  <artifactItems>*</artifactItems>
                   <outputAbsoluteArtifactFilename>true</outputAbsoluteArtifactFilename>
                   <outputDirectory>${basedir}/target/libs</outputDirectory>
                   <overWriteReleases>false</overWriteReleases>
                   <overWriteSnapshots>false</overWriteSnapshots>
                   <overWriteIfNewer>true</overWriteIfNewer>
+                  <includeScope>compile</includeScope>
                 </configuration>
               </execution>
             </executions>
@@ -265,12 +265,12 @@
                   <goal>copy-dependencies</goal>
                 </goals>
                 <configuration>
-                  <artifactItems>*</artifactItems>
                   <outputAbsoluteArtifactFilename>true</outputAbsoluteArtifactFilename>
                   <outputDirectory>${basedir}/target/libs</outputDirectory>
                   <overWriteReleases>false</overWriteReleases>
                   <overWriteSnapshots>false</overWriteSnapshots>
                   <overWriteIfNewer>true</overWriteIfNewer>
+                  <includeScope>compile</includeScope>
                 </configuration>
               </execution>
             </executions>
@@ -429,12 +429,12 @@
                   <goal>copy-dependencies</goal>
                 </goals>
                 <configuration>
-                  <artifactItems>*</artifactItems>
                   <outputAbsoluteArtifactFilename>true</outputAbsoluteArtifactFilename>
                   <outputDirectory>${basedir}/target/libs</outputDirectory>
                   <overWriteReleases>false</overWriteReleases>
                   <overWriteSnapshots>false</overWriteSnapshots>
                   <overWriteIfNewer>true</overWriteIfNewer>
+                  <includeScope>compile</includeScope>
                 </configuration>
               </execution>
             </executions>
@@ -450,7 +450,7 @@
                 <phase>package</phase>
                 <configuration>
                   <target>
-                    <!-- <taskdef resource="build.properties" classpathref="maven.plugin.classpath" 
+                    <!-- <taskdef resource="build.properties" classpathref="maven.plugin.classpath"
                       /> -->
                     <ant antfile="build.xml">
                       <target name="package"/>
@@ -598,8 +598,16 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
-      <version>2.7.0</version>
+      <version>${hadoop.version}</version>
       <exclusions>
+        <exclusion>
+          <groupId>commons-httpclient</groupId>
+          <artifactId>commons-httpclient</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>javax.servlet.jsp</groupId>
+          <artifactId>jsp-api</artifactId>
+        </exclusion>
         <exclusion>
           <groupId>javax.servlet</groupId>
           <artifactId>servlet-api</artifactId>
@@ -628,6 +636,10 @@
           <groupId>com.sun.jersey</groupId>
           <artifactId>jersey-server</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>jdk.tools</groupId>
+          <artifactId>jdk.tools</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
@@ -638,11 +650,6 @@
     <dependency>
       <groupId>org.apache.ambari</groupId>
       <artifactId>ambari-logsearch-appender</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.ambari</groupId>
-      <artifactId>ambari-metrics-common</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -744,6 +751,10 @@
           <groupId>javax.ws.rs</groupId>
           <artifactId>jsr311-api</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>com.google.code.findbugs</groupId>
+          <artifactId>annotations</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
@@ -790,6 +801,11 @@
       <groupId>org.bouncycastle</groupId>
       <artifactId>bcpkix-jdk15on</artifactId>
       <version>1.55</version>
+    </dependency>
+    <dependency>
+      <groupId>commons-configuration</groupId>
+      <artifactId>commons-configuration</artifactId>
+      <version>1.6</version>
     </dependency>
   </dependencies>
 </project>

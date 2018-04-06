@@ -23,11 +23,12 @@ from resource_management.libraries.functions.version import format_stack_version
 from resource_management.libraries.functions.default import default
 from resource_management.libraries.functions.get_kinit_path import get_kinit_path
 from resource_management.libraries.script import Script
+from resource_management.libraries.functions import stack_select
 from resource_management.libraries.functions.format import format
 from resource_management.libraries.functions import StackFeature
 from resource_management.libraries.functions.stack_features import check_stack_feature
 from resource_management.libraries.functions.expect import expect
-from resource_management.libraries.functions.setup_atlas_hook import has_atlas_in_cluster
+from resource_management.core.exceptions import Fail
 
 
 # a map of the Ambari role to the component name
@@ -70,7 +71,7 @@ zoo_conf_dir = "/etc/zookeeper"
 if stack_version_formatted and check_stack_feature(StackFeature.ROLLING_UPGRADE, stack_version_formatted):
   sqoop_conf_dir = format("{stack_root}/current/sqoop-client/conf")
   sqoop_lib = format("{stack_root}/current/sqoop-client/lib")
-  hadoop_home = format("{stack_root}/current/hadoop-client")
+  hadoop_home = stack_select.get_hadoop_dir("home")
   hbase_home = format("{stack_root}/current/hbase-client")
   hive_home = format("{stack_root}/current/hive-client")
   sqoop_bin_dir = format("{stack_root}/current/sqoop-client/bin/")
@@ -117,6 +118,7 @@ if "jdbc_drivers" in config['configurations']['sqoop-env']:
         jdbc_name = default("/hostLevelParams/custom_hsqldb_jdbc_name", None)
         previous_jdbc_jar_name = default("/hostLevelParams/previous_custom_hsqldb_jdbc_name", None)
         jdbc_driver_name = "hsqldb"
+      else: raise Fail(format("JDBC driver '{driver_name}' not supported."))
     else:
       continue
     sqoop_jdbc_drivers_dict.append(jdbc_name)

@@ -23,7 +23,6 @@ import socket
 import os
 from resource_management import *
 from resource_management.libraries.functions import stack_select
-from resource_management.libraries.functions import conf_select
 from resource_management.core.exceptions import ComponentIsNotRunning
 from resource_management.core.logger import Logger
 from resource_management.core import shell
@@ -33,17 +32,12 @@ from spark import *
 
 class ThriftServer(Script):
 
-  def get_component_name(self):
-    return "spark-thriftserver"
-
-
   def pre_upgrade_restart(self, env, upgrade_type=None):
     import params
 
     env.set_params(params)
     if params.version and compare_versions(format_stack_version(params.version), '4.0.0.0') >= 0:
-      conf_select.select(params.stack_name, "spark", params.version)
-      stack_select.select("spark-thriftserver", params.version)
+      stack_select.select_packages(params.version)
 
   def install(self, env):
     self.install_packages(env)

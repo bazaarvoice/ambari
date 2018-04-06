@@ -41,6 +41,7 @@ SMOKEUSER_KEYTAB_KEY = '{{cluster-env/smokeuser_keytab}}'
 SMOKEUSER_PRINCIPAL_KEY = '{{cluster-env/smokeuser_principal_name}}'
 SMOKEUSER_KEY = '{{cluster-env/smokeuser}}'
 HIVE_METASTORE_URIS_KEY = '{{hive-site/hive.metastore.uris}}'
+HIVE_PORT = '{{hive-site/hive.server2.thrift.port}}'
 
 # The configured Kerberos executable search paths, if any
 KERBEROS_EXECUTABLE_SEARCH_PATHS_KEY = '{{kerberos-env/executable_search_paths}}'
@@ -79,7 +80,8 @@ def get_tokens():
   to build the dictionary passed into execute
   """
   return (SECURITY_ENABLED_KEY,SMOKEUSER_KEYTAB_KEY,SMOKEUSER_PRINCIPAL_KEY,
-    HIVE_METASTORE_URIS_KEY, SMOKEUSER_KEY, KERBEROS_EXECUTABLE_SEARCH_PATHS_KEY,
+    HIVE_METASTORE_URIS_KEY, HIVE_PORT,
+    SMOKEUSER_KEY, KERBEROS_EXECUTABLE_SEARCH_PATHS_KEY,
     STACK_NAME, STACK_ROOT)
 
 @OsFamilyFuncImpl(os_family=OSConst.WINSRV_FAMILY)
@@ -108,6 +110,7 @@ def execute(configurations={}, parameters={}, host_name=None):
     return (('UNKNOWN', ['Hive metastore uris were not supplied to the script.']))
 
   metastore_uris = configurations[HIVE_METASTORE_URIS_KEY].split(',')
+  hive_port = configurations[HIVE_PORT]
 
   security_enabled = False
   if SECURITY_ENABLED_KEY in configurations:
@@ -186,13 +189,10 @@ def execute(configurations={}, parameters={}, host_name=None):
         conf_dir = hive_conf_dir
         bin_dir = hive_bin_dir
 
+    hive_jdbc_uri = format("jdbc:hive2://{host_name}:{hive_port}")
     cmd = format("export HIVE_CONF_DIR='{conf_dir}' ; "
-                 "hive --hiveconf hive.metastore.uris={metastore_uri}\
-                 --hiveconf hive.metastore.client.connect.retry.delay=1\
-                 --hiveconf hive.metastore.failure.retries=1\
-                 --hiveconf hive.metastore.connect.retries=1\
-                 --hiveconf hive.metastore.client.socket.timeout=14\
-                 --hiveconf hive.execution.engine=mr -e 'show databases;'")
+                 "beeline -u {hive_jdbc_uri} -n ambari-qa -p password\
+                 --hiveconf hive.execution.engine=tez -e 'show databases;'")
 
     start_time = time.time()
 

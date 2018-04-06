@@ -21,9 +21,9 @@ import StringIO
 import sys, pprint
 from resource_management.libraries.script import Script
 from resource_management.core.environment import Environment
-from mock.mock import patch
+from resource_management.core.logger import Logger
+from mock.mock import patch, MagicMock
 from stacks.utils.RMFTestCase import *
-import logging
 
 class TestScript(RMFTestCase):
 
@@ -63,25 +63,28 @@ class TestScript(RMFTestCase):
 
     # Testing config without any keys
     with Environment(".", test_mode=True) as env:
-      script = Script()
-      Script.config = no_packages_config
-      script.install_packages(env)
+      with patch("resource_management.libraries.script.get_provider", return_value=MagicMock()):
+        script = Script()
+        Script.config = no_packages_config
+        script.install_packages(env)
     resource_dump = pprint.pformat(env.resource_list)
     self.assertEquals(resource_dump, "[]")
 
     # Testing empty package list
     with Environment(".", test_mode=True) as env:
-      script = Script()
-      Script.config = empty_config
-      script.install_packages(env)
+      with patch("resource_management.libraries.script.get_provider", return_value=MagicMock()):
+        script = Script()
+        Script.config = empty_config
+        script.install_packages(env)
     resource_dump = pprint.pformat(env.resource_list)
     self.assertEquals(resource_dump, "[]")
 
     # Testing installing of a list of packages
     with Environment(".", test_mode=True) as env:
-      script = Script()
-      Script.config = dummy_config
-      script.install_packages("env")
+      with patch("resource_management.libraries.script.get_provider", return_value=MagicMock()):
+        script = Script()
+        Script.config = dummy_config
+        script.install_packages("env")
     resource_dump = pprint.pformat(env.resource_list)
     self.assertEqual(resource_dump, '[Package[\'hbase\'], Package[\'yet-another-package\']]')
 
@@ -107,7 +110,7 @@ class TestScript(RMFTestCase):
   @patch("__builtin__.open")
   def test_status_commands_clear_structured_out(self, open_mock):
     """
-    Tests that status commands will clear and stored structured output from prior status commands.
+    Tests that status commands will clear any stored structured output from prior status commands.
     :param open_mock: 
     :return: 
     """
@@ -137,6 +140,28 @@ class TestScript(RMFTestCase):
 
     self.assertTrue(open_mock.called)
     self.assertEquals({}, Script.structuredOut)
+
+
+  @patch.object(Logger, "error", new = MagicMock())
+  @patch.object(Script, "put_structured_out")
+  @patch("resource_management.libraries.functions.version_select_util.get_component_version_from_symlink", new = MagicMock(return_value=None))
+  @patch("resource_management.libraries.functions.stack_select.get_package_name", new = MagicMock(return_value="foo-package"))
+  @patch("resource_management.libraries.functions.stack_select.unsafe_get_stack_versions", new = MagicMock(return_value=("",0,["2.6.0.0-1234"])))
+  def test_save_version_structured_out_stack_select(self, pso_mock):
+    """
+    Tests that when writing out the version of the component to the structure output,
+    if all else fails, we'll invoke the stack-select tool to see if there are any versions
+    reported.
+    :param pso_mock:
+    :return:
+    """
+    script = Script()
+    script.stroutfile = ''
+    script.save_component_version_to_structured_out("start")
+
+    self.assertEqual(pso_mock.call_count, 1)
+    self.assertEquals(pso_mock.call_args[0][0], {'version':'2.6.0.0-1234'})
+
 
   def tearDown(self):
     # enable stdout

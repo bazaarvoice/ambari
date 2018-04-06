@@ -41,6 +41,24 @@ class HDP25StackAdvisor(HDP24StackAdvisor):
   def recommendOozieConfigurations(self, configurations, clusterData, services, hosts):
     super(HDP25StackAdvisor,self).recommendOozieConfigurations(configurations, clusterData, services, hosts)
     putOozieEnvProperty = self.putProperty(configurations, "oozie-env", services)
+    servicesList = [service["StackServices"]["service_name"] for service in services["services"]]
+    putOozieSiteProperty = self.putProperty(configurations, "oozie-site", services)
+    putOozieSitePropertyAttributes = self.putPropertyAttribute(configurations, "oozie-site")
+
+    if "FALCON" in servicesList:
+      putOozieSiteProperty('oozie.service.ELService.ext.functions.workflow',
+                           'now=org.apache.oozie.extensions.OozieELExtensions#ph1_now_echo, \
+                            today=org.apache.oozie.extensions.OozieELExtensions#ph1_today_echo, \
+                            yesterday=org.apache.oozie.extensions.OozieELExtensions#ph1_yesterday_echo, \
+                            currentMonth=org.apache.oozie.extensions.OozieELExtensions#ph1_currentMonth_echo, \
+                            lastMonth=org.apache.oozie.extensions.OozieELExtensions#ph1_lastMonth_echo, \
+                            currentYear=org.apache.oozie.extensions.OozieELExtensions#ph1_currentYear_echo, \
+                            lastYear=org.apache.oozie.extensions.OozieELExtensions#ph1_lastYear_echo, \
+                            formatTime=org.apache.oozie.coord.CoordELFunctions#ph1_coord_formatTime_echo, \
+                            latest=org.apache.oozie.coord.CoordELFunctions#ph2_coord_latest_echo, \
+                            future=org.apache.oozie.coord.CoordELFunctions#ph2_coord_future_echo')
+    else:
+      putOozieSitePropertyAttributes('oozie.service.ELService.ext.functions.workflow', 'delete', 'true')
 
     if not "oozie-env" in services["configurations"] :
       Logger.info("No oozie configurations available")
@@ -524,6 +542,7 @@ class HDP25StackAdvisor(HDP24StackAdvisor):
                            '[{"class": "org.apache.hadoop.metrics2.sink.storm.StormTimelineMetricsSink", '
                            '"parallelism.hint": 1, '
                            '"whitelist": ["kafkaOffset\\\..+/", "__complete-latency", "__process-latency", '
+                           '"__execute-latency", '
                            '"__receive\\\.population$", "__sendqueue\\\.population$", "__execute-count", "__emit-count", '
                            '"__ack-count", "__fail-count", "memory/heap\\\.usedBytes$", "memory/nonHeap\\\.usedBytes$", '
                            '"GC/.+\\\.count$", "GC/.+\\\.timeMs$"]}]')
@@ -806,7 +825,7 @@ class HDP25StackAdvisor(HDP24StackAdvisor):
 
     if self.__isServiceDeployed(services, "SPARK"):
       timeline_plugin_classes_values.append('org.apache.spark.deploy.history.yarn.plugin.SparkATSPlugin')
-      timeline_plugin_classpath_values.append(stack_root + "/${hdp.version}/spark/hdpLib/*")
+      timeline_plugin_classpath_values.append(stack_root + "/{{spark_version}}/spark/hdpLib/*")
 
     putYarnSiteProperty('yarn.timeline-service.entity-group-fs-store.group-id-plugin-classes', ",".join(timeline_plugin_classes_values))
     putYarnSiteProperty('yarn.timeline-service.entity-group-fs-store.group-id-plugin-classpath', ":".join(timeline_plugin_classpath_values))
@@ -843,6 +862,7 @@ class HDP25StackAdvisor(HDP24StackAdvisor):
     putHiveInteractiveEnvProperty = self.putProperty(configurations, "hive-interactive-env", services)
     putHiveInteractiveEnvPropertyAttribute = self.putPropertyAttribute(configurations, "hive-interactive-env")
     putTezInteractiveSiteProperty = self.putProperty(configurations, "tez-interactive-site", services)
+    putTezInteractiveSitePropertyAttribute = self.putPropertyAttribute(configurations, "tez-interactive-site")
     llap_daemon_selected_queue_name = None
     selected_queue_is_ambari_managed_llap = None  # Queue named 'llap' at root level is Ambari managed.
     llap_selected_queue_am_percent = None
@@ -1277,6 +1297,11 @@ class HDP25StackAdvisor(HDP24StackAdvisor):
       putHiveInteractiveSiteProperty('hive.server2.tez.sessions.per.default.queue', long(llap_concurrency))
       putHiveInteractiveSitePropertyAttribute('hive.server2.tez.sessions.per.default.queue', "minimum", min_llap_concurrency)
 
+    # Check if 'max_llap_concurreny' < 'llap_concurrency'.
+    if max_llap_concurreny < llap_concurrency:
+      self.logger.info("DBG: Adjusting 'max_llap_concurreny' to : {0}, based on 'llap_concurrency' : {1} and "
+                       "earlier 'max_llap_concurreny' : {2}. ".format(llap_concurrency, llap_concurrency, max_llap_concurreny))
+      max_llap_concurreny = llap_concurrency
     putHiveInteractiveSitePropertyAttribute('hive.server2.tez.sessions.per.default.queue', "maximum", long(max_llap_concurreny))
 
     num_llap_nodes = long(num_llap_nodes)
@@ -1310,7 +1335,7 @@ class HDP25StackAdvisor(HDP24StackAdvisor):
     putTezInteractiveSiteProperty('tez.runtime.io.sort.mb', tez_runtime_io_sort_mb)
     if "tez-site" in services["configurations"] and "tez.runtime.sorter.class" in services["configurations"]["tez-site"]["properties"]:
       if services["configurations"]["tez-site"]["properties"]["tez.runtime.sorter.class"] == "LEGACY":
-        putTezInteractiveSiteProperty("tez.runtime.io.sort.mb", "maximum", 1800)
+        putTezInteractiveSitePropertyAttribute("tez.runtime.io.sort.mb", "maximum", 1800)
 
     putTezInteractiveSiteProperty('tez.runtime.unordered.output.buffer.size-mb', tez_runtime_unordered_output_buffer_size)
     putHiveInteractiveSiteProperty('hive.auto.convert.join.noconditionaltask.size', hive_auto_convert_join_noconditionaltask_size)
@@ -1981,7 +2006,8 @@ yarn.scheduler.capacity.root.{0}.maximum-am-resource-percent=1""".format(llap_qu
     super(HDP25StackAdvisor, self).recommendRangerKMSConfigurations(configurations, clusterData, services, hosts)
 
     security_enabled = self.isSecurityEnabled(services)
-    required_services = [{'service' : 'RANGER', 'config-type': 'ranger-env', 'property-name': 'ranger_user', 'proxy-category': ['hosts', 'users', 'groups']}]
+    required_services = [{'service' : 'RANGER', 'config-type': 'ranger-env', 'property-name': 'ranger_user', 'proxy-category': ['hosts', 'users', 'groups']},
+    {'service' : 'SPARK2', 'config-type': 'livy2-env', 'property-name': 'livy2_user', 'proxy-category': ['hosts', 'users', 'groups']}]
 
     if security_enabled:
       # recommendations for kms proxy related properties

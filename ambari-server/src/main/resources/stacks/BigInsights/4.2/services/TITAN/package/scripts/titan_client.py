@@ -22,7 +22,6 @@ Ambari Agent
 import sys
 import os
 from resource_management import *
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from titan import titan
 
@@ -39,16 +38,12 @@ class TitanClient(Script):
 
 @OsFamilyImpl(os_family=OsFamilyImpl.DEFAULT)
 class TitanClientLinux(TitanClient):
-    def get_component_name(self):
-        return "titan-client"
-
     def pre_rolling_restart(self, env):
         import params
         env.set_params(params)
 
         if params.version and compare_versions(format_stack_version(params.version), '4.2.0.0') >= 0:
-            conf_select.select(params.stack_name, "titan", params.version)
-            stack_select.select("titan-client", params.version)
+            stack_select.select_packages(params.version)
 
     def install(self, env):
         self.install_packages(env)

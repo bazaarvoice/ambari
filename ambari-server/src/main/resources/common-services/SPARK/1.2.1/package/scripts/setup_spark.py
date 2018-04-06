@@ -18,17 +18,19 @@ limitations under the License.
 
 """
 
-import sys
-import fileinput
-import shutil
 import os
-from resource_management import *
-from resource_management.core.exceptions import ComponentIsNotRunning
-from resource_management.core.logger import Logger
-from resource_management.core import shell
+
+from resource_management.core.resources import Directory
+from resource_management.core.resources import File
+from resource_management.core.source import InlineTemplate
 from resource_management.libraries.functions.version import format_stack_version
 from resource_management.libraries.functions.stack_features import check_stack_feature
+from resource_management.libraries.functions import lzo_utils
+from resource_management.libraries.resources import PropertiesFile
 from resource_management.libraries.functions import StackFeature
+from resource_management.libraries.resources import HdfsResource
+from resource_management.libraries.resources import XmlConfig
+
 
 def setup_spark(env, type, upgrade_type=None, action=None, config_dir=None):
   """
@@ -41,6 +43,9 @@ def setup_spark(env, type, upgrade_type=None, action=None, config_dir=None):
 
   import params
 
+  # ensure that matching LZO libraries are installed for Spark
+  lzo_utils.install_lzo_if_needed()
+
   if config_dir is None:
     config_dir = params.spark_conf
 
@@ -48,7 +53,8 @@ def setup_spark(env, type, upgrade_type=None, action=None, config_dir=None):
             owner=params.spark_user,
             group=params.user_group,
             mode=0775,
-            create_parents = True
+            create_parents = True,
+            cd_access = 'a',
   )
   if type == 'server' and action == 'config':
     params.HdfsResource(params.spark_hdfs_user_dir,

@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 """
 Licensed to the Apache Software Foundation (ASF) under one
@@ -43,23 +42,18 @@ def run_migration(env, upgrade_type):
   if params.upgrade_direction is None:
     raise Fail('Parameter "upgrade_direction" is missing.')
 
-  if params.upgrade_direction == Direction.DOWNGRADE and params.downgrade_from_version is None:
-    raise Fail('Parameter "downgrade_from_version" is missing.')
-
-  if not params.security_enabled:
+  if not params.kerberos_security_enabled:
     Logger.info("Skip running the Kafka ACL migration script since cluster security is not enabled.")
     return
   
   Logger.info("Upgrade type: {0}, direction: {1}".format(str(upgrade_type), params.upgrade_direction))
 
   # If the schema upgrade script exists in the version upgrading to, then attempt to upgrade/downgrade it while still using the present bits.
-  kafka_acls_script = None
+  kafka_acls_script = format("{stack_root}/{downgrade_from_version}/kafka/bin/kafka-acls.sh")
   command_suffix = ""
   if params.upgrade_direction == Direction.UPGRADE:
-    kafka_acls_script = format("{stack_root}/{version}/kafka/bin/kafka-acls.sh")
     command_suffix = "--upgradeAcls"
   elif params.upgrade_direction == Direction.DOWNGRADE:
-    kafka_acls_script = format("{stack_root}/{downgrade_from_version}/kafka/bin/kafka-acls.sh")
     command_suffix = "--downgradeAcls"
 
   if kafka_acls_script is not None:

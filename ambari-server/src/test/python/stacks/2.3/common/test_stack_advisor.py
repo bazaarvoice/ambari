@@ -324,6 +324,11 @@ class TestHDP23StackAdvisor(TestCase):
           },
           "property_attributes": {}
         },
+        "kafka-env": {
+          "properties": {
+            "kafka_user" : "custom_kafka"
+          }
+        },
         "kafka-broker": {
           "properties": {
             "authorizer.class.name" : "kafka.security.auth.SimpleAclAuthorizer"
@@ -363,6 +368,22 @@ class TestHDP23StackAdvisor(TestCase):
     self.stackAdvisor.recommendKAFKAConfigurations(configurations, clusterData, services, None)
     self.assertEquals(configurations['kafka-broker']['properties']['authorizer.class.name'], 'kafka.security.auth.SimpleAclAuthorizer' , "Test authorizer.class.name with Ranger Kafka plugin disabled in kerberos environment")
 
+    # Advise 'PLAINTEXTSASL' for secure cluster by default
+    services['configurations']['cluster-env']['properties']['security_enabled'] = "true"
+    configurations['kafka-broker']['properties'] = {}
+    configurations['kafka-broker']['property_attributes'] = {}
+    self.stackAdvisor.recommendKAFKAConfigurations(configurations, clusterData, services, None)
+    self.assertEqual(configurations['kafka-broker']['properties']['security.inter.broker.protocol'], 'PLAINTEXTSASL')
+
+    # Secure security.inter.broker.protocol values should be retained by stack advisor
+    services['configurations']['cluster-env']['properties']['security_enabled'] = "true"
+    configurations['kafka-broker']['properties'] = {}
+    configurations['kafka-broker']['property_attributes'] = {}
+    for proto in ('PLAINTEXTSASL', 'SASL_PLAINTEXT', 'SASL_SSL'):
+      services['configurations']['kafka-broker']['properties']['security.inter.broker.protocol'] = proto
+      self.stackAdvisor.recommendKAFKAConfigurations(configurations, clusterData, services, None)
+      self.assertEqual(configurations['kafka-broker']['properties']['security.inter.broker.protocol'], proto)
+
     # Test authorizer.class.name with Ranger Kafka plugin enabled in non-kerberos environment
     services['configurations']['cluster-env']['properties']['security_enabled'] = "false"
     configurations['kafka-broker']['properties'] = {}
@@ -382,6 +403,7 @@ class TestHDP23StackAdvisor(TestCase):
     self.stackAdvisor.recommendKAFKAConfigurations(configurations, clusterData, services, None)
     self.assertEquals(configurations['kafka-broker']['properties']['authorizer.class.name'], 'org.apache.ranger.authorization.kafka.authorizer.RangerKafkaAuthorizer', "Test authorizer.class.name with Ranger Kafka plugin enabled in kerberos environment")
     self.assertEquals(configurations['ranger-kafka-plugin-properties']['properties']['zookeeper.connect'], 'host1:2181')
+    self.assertTrue('security.inter.broker.protocol' not in configurations['kafka-broker']['properties'])
 
     # Test kafka-log4j content when Ranger plugin for Kafka is enabled
 
@@ -2002,11 +2024,11 @@ class TestHDP23StackAdvisor(TestCase):
         "property_attributes": {
           "logsearch.collection.service.logs.numshards": {
             "minimum": "1",
-            "maximum": "3"
+            "maximum": "5"
           },
           "logsearch.collection.audit.logs.numshards": {
             "minimum": "1",
-            "maximum": "3"
+            "maximum": "5"
           }
         }
       }

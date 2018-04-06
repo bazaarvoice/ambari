@@ -57,6 +57,7 @@ import org.apache.ambari.server.state.ServiceComponentFactory;
 import org.apache.ambari.server.state.ServiceComponentHost;
 import org.apache.ambari.server.state.ServiceInfo;
 import org.apache.ambari.server.state.ServiceOsSpecific;
+import org.apache.ambari.server.state.StackId;
 import org.apache.ambari.server.state.State;
 import org.apache.ambari.server.state.configgroup.ConfigGroupFactory;
 import org.apache.ambari.server.state.quicklinksprofile.QuickLinkVisibilityController;
@@ -114,7 +115,7 @@ public interface AmbariManagementController {
    * TODO move this method to Cluster? doesn't seem to be on its place
    * @return config created
    */
-  Config createConfig(Cluster cluster, String type, Map<String, String> properties,
+  Config createConfig(Cluster cluster, StackId stackId, String type, Map<String, String> properties,
                       String versionTag, Map<String, Map<String, String>> propertiesAttributes);
 
   /**
@@ -368,18 +369,18 @@ public interface AmbariManagementController {
   public void createExtensionLink(ExtensionLinkRequest request) throws AmbariException;
 
   /**
-   * Update a link between an extension and a stack
+   * Update a link - switch the link's extension version while keeping the same stack version and extension name
    *
    * @throws AmbariException if we fail to link the extension to the stack
    */
   public void updateExtensionLink(ExtensionLinkRequest request) throws AmbariException;
 
   /**
-   * Update a link between an extension and a stack
+   * Update a link - switch the link's extension version while keeping the same stack version and extension name
    *
    * @throws AmbariException if we fail to link the extension to the stack
    */
-  public void updateExtensionLink(ExtensionLinkEntity linkEntity) throws AmbariException;
+  void updateExtensionLink(ExtensionLinkEntity oldLinkEntity, ExtensionLinkRequest newLinkRequest) throws AmbariException;
 
   /**
    * Delete a link between an extension and a stack

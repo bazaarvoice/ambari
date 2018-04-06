@@ -7,11 +7,6 @@
         "max_version": "4.0.0.0"
       },
       {
-        "name": "lzo",
-        "description": "LZO libraries support",
-        "min_version": "4.1.0.0"
-      },
-      {
         "name": "express_upgrade",
         "description": "Express upgrade support",
         "min_version": "4.2.0.0"
@@ -75,12 +70,6 @@
         "name": "spark_thriftserver",
         "description": "Spark Thrift Server",
         "min_version": "4.2.0.0"
-      },
-      {
-        "name": "create_kafka_broker_id",
-        "description": "Ambari should create Kafka Broker Id (AMBARI-12678)",
-        "min_version": "4.0.0.0",
-        "max_version": "4.2.0.0"
       },
       {
         "name": "kafka_listeners",

@@ -22,6 +22,7 @@ from mock.mock import patch, MagicMock
 from stacks.utils.RMFTestCase import *
 from resource_management.core.logger import Logger
 from resource_management.libraries.functions import conf_select
+from resource_management.libraries.script import Script
 
 class TestConfSelect(RMFTestCase):
 
@@ -32,6 +33,12 @@ class TestConfSelect(RMFTestCase):
     from resource_management.core.environment import Environment
     self.env = Environment(test_mode=True)
     self.env.__enter__()
+
+    Script.config = dict()
+    Script.config.update( { "configurations" : { "cluster-env" : {} }, "hostLevelParams": {} } )
+    Script.config["configurations"]["cluster-env"]["stack_packages"] = RMFTestCase.get_stack_packages()
+    Script.config["hostLevelParams"] = { "stack_name" : "HDP" }
+
 
   def tearDown(self):
     self.env.__exit__(None,None,None)
@@ -82,21 +89,24 @@ class TestConfSelect(RMFTestCase):
     Tests that a bad enum throws an exception.
     :return:
     """
+    packages = conf_select.get_package_dirs()
+
     try:
       conf_select.convert_conf_directories_to_symlinks("hadoop", "2.3.0.0-1234",
-        conf_select._PACKAGE_DIRS["hadoop"], link_to = "INVALID")
+        packages["hadoop"], link_to = "INVALID")
       raise Exception("Expected failure when supplying a bad enum for link_to")
     except:
       pass
 
 
   @patch("resource_management.core.shell.call")
+  @patch.object(os.path, "isdir")
   @patch.object(os.path, "exists")
   @patch.object(os.path, "islink")
   @patch("resource_management.libraries.functions.conf_select._valid", new = MagicMock(return_value = True))
   @patch("resource_management.libraries.functions.conf_select.create", new = MagicMock(return_value = ["/etc/hadoop/2.3.0.0-1234/0"]))
   @patch("resource_management.libraries.functions.conf_select.select", new = MagicMock())
-  def test_symlink_conversion_to_current(self, islink_mock, path_mock, shell_call_mock):
+  def test_symlink_conversion_to_current(self, islink_mock, path_mock, isdir_mock, shell_call_mock):
     """
     Tests that conf-select creates the correct symlink directories.
     :return:
@@ -125,15 +135,23 @@ class TestConfSelect(RMFTestCase):
 
       return False
 
+    def isdir_mock_call(path):
+      if path == "/etc/hadoop/conf":
+        return True
+
+      return False
+
+
+    packages = conf_select.get_package_dirs()
+
     path_mock.side_effect = path_mock_call
     islink_mock.side_effect = islink_mock_call
     shell_call_mock.side_effect = mock_call
-    conf_select.convert_conf_directories_to_symlinks("hadoop", "2.3.0.0-1234", conf_select._PACKAGE_DIRS["hadoop"])
+    conf_select.convert_conf_directories_to_symlinks("hadoop", "2.3.0.0-1234", packages["hadoop"])
 
-    self.assertEqual(pprint.pformat(self.env.resource_list),
-      "[Execute[('cp', '-R', '-p', '/etc/hadoop/conf', '/etc/hadoop/conf.backup')],\n "
-      "Directory['/etc/hadoop/conf'],\n "
-      "Link['/etc/hadoop/conf']]")
+    self.assertEqual(pprint.pformat(self.env.resource_list[0]), "Execute[('cp', '-R', '-p', u'/etc/hadoop/conf', u'/etc/hadoop/conf.backup')]")
+    self.assertEqual(pprint.pformat(self.env.resource_list[1]), "Directory['/etc/hadoop/conf']")
+    self.assertEqual(pprint.pformat(self.env.resource_list[2]), "Link['/etc/hadoop/conf']")
 
 
   @patch.object(os.path, "exists", new = MagicMock(return_value = True))
@@ -147,8 +165,10 @@ class TestConfSelect(RMFTestCase):
     Tests that conf-select symlinking can detect a wrong directory
     :return:
     """
+    packages = conf_select.get_package_dirs()
+
     conf_select.convert_conf_directories_to_symlinks("hadoop", "2.3.0.0-1234",
-      conf_select._PACKAGE_DIRS["hadoop"])
+      packages["hadoop"])
 
     self.assertEqual(pprint.pformat(self.env.resource_list),
       "[Link['/etc/hadoop/conf'], Link['/etc/hadoop/conf']]")
@@ -161,7 +181,20 @@ class TestConfSelect(RMFTestCase):
     Tests that conf-select symlinking does nothing if the directory doesn't exist
     :return:
     """
-    conf_select.convert_conf_directories_to_symlinks("hadoop", "2.3.0.0-1234",
-      conf_select._PACKAGE_DIRS["hadoop"], link_to = conf_select.DIRECTORY_TYPE_BACKUP)
+    packages = conf_select.get_package_dirs()
+
+    conf_select.convert_conf_directories_to_symlinks("hadoop", "2.3.0.0-1234", packages["hadoop"])
 
     self.assertEqual(pprint.pformat(self.env.resource_list), "[]")
+
+
+  def test_restrictions(self):
+
+    Script.config.update({'roleParameters': {'cluster_version_summary': {'services': {'HIVE': {'upgrade': True}}}}})
+
+    restricted = conf_select.get_restricted_packages()
+    self.assertTrue("hive" in restricted)
+    self.assertTrue("hive-hcatalog" in restricted)
+    self.assertTrue("hive2" in restricted)
+    self.assertTrue("tez_hive2" in restricted)
+    self.assertTrue("hadoop" not in restricted)

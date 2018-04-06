@@ -20,7 +20,7 @@ limitations under the License.
 
 import os
 import time
-import subprocess
+from ambari_commons import subprocess32
 
 from hcat_service_check import hcat_service_check
 from webhcat_service_check import webhcat_service_check
@@ -170,10 +170,8 @@ class HiveServiceCheckDefault(HiveServiceCheck):
     if kinit_cmd:
       beeline_url.append('principal={key}')
 
-    exec_path = params.execute_path
-    if params.version:
-      upgrade_hive_bin = format("{stack_root}/{version}/hive2/bin")
-      exec_path =  os.environ['PATH'] + os.pathsep + params.hadoop_bin_dir + os.pathsep + upgrade_hive_bin
+    hive_interactive_bin = format("{stack_root}/current/hive-server2-hive2/bin")
+    exec_path =  os.environ['PATH'] + os.pathsep + params.hadoop_bin_dir + os.pathsep + hive_interactive_bin
 
     # beeline path
     llap_cmd = "! beeline -u '%s'" % format(";".join(beeline_url))
@@ -187,7 +185,7 @@ class HiveServiceCheckDefault(HiveServiceCheck):
             path=['/usr/sbin', '/usr/local/bin', '/bin', '/usr/bin', exec_path],
             tries=1,
             wait_for_finish=True,
-            stderr=subprocess.PIPE,
+            stderr=subprocess32.PIPE,
             logoutput=True)
 
 if __name__ == "__main__":

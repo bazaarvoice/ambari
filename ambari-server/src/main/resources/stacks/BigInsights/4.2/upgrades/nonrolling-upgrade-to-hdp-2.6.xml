@@ -27,6 +27,7 @@
     <check>org.apache.ambari.server.checks.ServicesYarnWorkPreservingCheck</check>
     <check>org.apache.ambari.server.checks.JavaVersionCheck</check>
     <check>org.apache.ambari.server.checks.RangerSSLConfigCheck</check>
+    <check>org.apache.ambari.server.checks.LZOCheck</check>
     <configuration>
       <!-- Configuration properties for all pre-reqs including required pre-reqs -->
       <check-properties name="org.apache.ambari.server.checks.HiveDynamicServiceDiscoveryCheck">
@@ -169,9 +170,9 @@
     </group>
 
     <!-- After processing this group, will change the effective Stack of the UpgradeContext object. -->
-    <group xsi:type="update-stack" name="UPDATE_DESIRED_STACK_ID" title="Update Target Stack">
-      <execute-stage title="Update Target Stack">
-        <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.UpdateDesiredStackAction">
+    <group xsi:type="update-stack" name="UPDATE_DESIRED_REPOSITORY_ID" title="Update Target Repositories">
+      <execute-stage title="Update Target Repositories">
+        <task xsi:type="server_action" class="org.apache.ambari.server.serveraction.upgrades.UpdateDesiredRepositoryAction">
         </task>
       </execute-stage>
     </group>
@@ -291,9 +292,7 @@
       <execute-stage service="HIVE" component="HIVE_SERVER" title="Apply config changes for Hive Server">
         <task xsi:type="configure" id="biginsights_4_2_hive_server_configure_authentication"/>
       </execute-stage>
-      <execute-stage service="HIVE" component="HIVE_SERVER" title="Enable custom extensions for Hive Server">
-        <task xsi:type="configure" id="biginsights_4_2_hive_site_custom_extensions"/>
-      </execute-stage>
+
       <execute-stage service="HIVE" component="HIVE_SERVER" title="Enable custom extensions for Hive Server">
         <task xsi:type="configure" id="biginsights_4_2_hive_env_custom_extensions"/>
       </execute-stage>

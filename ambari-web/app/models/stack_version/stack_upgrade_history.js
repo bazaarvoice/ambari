@@ -17,13 +17,14 @@
  */
 
 var App = require('app');
+var stringUtils = require('utils/string_utils');
 
 App.StackUpgradeHistory = DS.Model.extend({
   requestId: DS.attr('number'),
+  upgradeId: DS.attr('number'),
   clusterName: DS.attr('string'),
   direction: DS.attr('string'),
-  fromVersion: DS.attr('string'),
-  toVersion: DS.attr('string'),
+  associatedVersion: DS.attr('string'),
   requestStatus: DS.attr('string'),
   upgradeType: DS.attr('string'),
   downgradeAllowed: DS.attr('boolean'),
@@ -32,21 +33,10 @@ App.StackUpgradeHistory = DS.Model.extend({
   endTime: DS.attr('number'),
   startTime: DS.attr('number'),
   createTime: DS.attr('number'),
-
-  displayFromVersion: function() {
-    var stackName = App.RepositoryVersion.find()
-      .findProperty('repositoryVersion', this.get('fromVersion'))
-      .get('stackVersionType');
-    return stackName + '-' + this.get('fromVersion');
-  }.property('fromVersion'),
-
-  displayToVersion: function() {
-    var stackName = App.RepositoryVersion.find()
-      .findProperty('repositoryVersion', this.get('toVersion'))
-      .get('stackVersionType');
-    return stackName + '-' + this.get('toVersion');
-  }.property('toVersion')
-
+  versions: DS.attr('object'),
+  displayStatus: function() {
+    return stringUtils.upperUnderscoreToText(this.get('requestStatus'));
+  }.property('requestStatus')
 });
 
 App.StackUpgradeHistory.FIXTURES = [];

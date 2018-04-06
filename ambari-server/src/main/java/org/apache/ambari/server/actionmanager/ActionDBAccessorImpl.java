@@ -531,6 +531,11 @@ public class ActionDBAccessorImpl implements ActionDBAccessor {
             }
           }
 
+          // if TIMEOUT and marked for holding then set status = HOLDING_TIMEOUT
+          if (status == HostRoleStatus.TIMEDOUT && commandEntity.isRetryAllowed()){
+            status = HostRoleStatus.HOLDING_TIMEDOUT;
+          }
+
           commandEntity.setStatus(status);
           statusChanged = true;
           break;
@@ -596,6 +601,11 @@ public class ActionDBAccessorImpl implements ActionDBAccessor {
         if (command.isFailureAutoSkipped()) {
           status = HostRoleStatus.SKIPPED_FAILED;
         }
+      }
+
+      // if TIMEOUT and marked for holding then set status = HOLDING_TIMEOUT
+      if (status == HostRoleStatus.TIMEDOUT && command.isRetryAllowed()){
+        status = HostRoleStatus.HOLDING_TIMEDOUT;
       }
 
       command.setStatus(status);
@@ -811,7 +821,19 @@ public class ActionDBAccessorImpl implements ActionDBAccessor {
   }
 
   @Override
-  public void resubmitTasks(List<Long> taskIds) {
+  @Transactional
+  public void resubmitTasks(long requestId, List<Long> taskIds) {
+    RequestEntity requestEntity = requestDAO.findByPK(requestId);
+    if (null == requestEntity) {
+      throw new IllegalArgumentException(String.format(
+          "Unable to find request with ID %s while trying to resume tasks", requestId));
+    }
+
+    // since the taska are being re-submitted, make sure that the end time of
+    // the request is still -1
+    requestEntity.setEndTime(-1L);
+    requestDAO.merge(requestEntity);
+
     List<HostRoleCommandEntity> tasks = hostRoleCommandDAO.findByPKs(taskIds);
     for (HostRoleCommandEntity task : tasks) {
       task.setStatus(HostRoleStatus.PENDING);

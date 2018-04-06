@@ -34,7 +34,7 @@ import org.apache.ambari.server.orm.DBAccessor.DBColumnInfo;
 import org.apache.ambari.server.orm.dao.ArtifactDAO;
 import org.apache.ambari.server.orm.dao.ClusterDAO;
 import org.apache.ambari.server.orm.entities.ArtifactEntity;
-import org.apache.ambari.server.orm.entities.ClusterConfigMappingEntity;
+import org.apache.ambari.server.orm.entities.ClusterConfigEntity;
 import org.apache.ambari.server.orm.entities.ClusterEntity;
 import org.apache.ambari.server.serveraction.kerberos.DeconstructedPrincipal;
 import org.apache.ambari.server.state.Cluster;
@@ -51,12 +51,12 @@ import org.apache.ambari.server.state.kerberos.KerberosDescriptorFactory;
 import org.apache.ambari.server.state.kerberos.KerberosServiceDescriptor;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Sets;
 import com.google.inject.Inject;
 import com.google.inject.Injector;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The {@link org.apache.ambari.server.upgrade.UpgradeCatalog252} upgrades Ambari from 2.5.1 to 2.5.2.
@@ -65,6 +65,7 @@ public class UpgradeCatalog252 extends AbstractUpgradeCatalog {
 
   static final String CLUSTERCONFIG_TABLE = "clusterconfig";
   static final String SERVICE_DELETED_COLUMN = "service_deleted";
+  static final String UNMAPPED_COLUMN = "unmapped";
 
   private static final String UPGRADE_TABLE = "upgrade";
   private static final String UPGRADE_TABLE_FROM_REPO_COLUMN = "from_repo_version_id";
@@ -81,7 +82,7 @@ public class UpgradeCatalog252 extends AbstractUpgradeCatalog {
   private static final String MARIADB_REDHAT_SUPPORT = "mariadb_redhat_support";
 
   private static final List<String> configTypesToEnsureSelected = Arrays.asList("spark2-javaopts-properties");
-  
+
   /**
    * Logger.
    */
@@ -149,8 +150,10 @@ public class UpgradeCatalog252 extends AbstractUpgradeCatalog {
    * @throws java.sql.SQLException
    */
   private void addServiceDeletedColumnToClusterConfigTable() throws SQLException {
-    dbAccessor.addColumn(CLUSTERCONFIG_TABLE,
-        new DBColumnInfo(SERVICE_DELETED_COLUMN, Short.class, null, 0, false));
+    if (!dbAccessor.tableHasColumn(CLUSTERCONFIG_TABLE, UNMAPPED_COLUMN)) {
+      dbAccessor.addColumn(CLUSTERCONFIG_TABLE,
+          new DBColumnInfo(SERVICE_DELETED_COLUMN, Short.class, null, 0, false));
+    }
   }
 
   /**
@@ -255,16 +258,16 @@ public class UpgradeCatalog252 extends AbstractUpgradeCatalog {
       LOG.info("Ensuring all config types have at least one selected config for cluster {}", clusterEntity.getClusterName());
 
       boolean atLeastOneChanged = false;
-      Collection<ClusterConfigMappingEntity> configMappingEntities = clusterEntity.getConfigMappingEntities();
+      Collection<ClusterConfigEntity> configEntities = clusterEntity.getClusterConfigEntities();
 
-      if (configMappingEntities != null) {
+      if (configEntities != null) {
         Set<String> configTypesNotSelected = new HashSet<>();
         Set<String> configTypesWithAtLeastOneSelected = new HashSet<>();
 
-        for (ClusterConfigMappingEntity clusterConfigMappingEntity : configMappingEntities) {
-          String typeName = clusterConfigMappingEntity.getType();
+        for (ClusterConfigEntity clusterConfigEntity : configEntities) {
+          String typeName = clusterConfigEntity.getType();
 
-          if (clusterConfigMappingEntity.isSelected() == 1) {
+          if (clusterConfigEntity.isSelected()) {
             configTypesWithAtLeastOneSelected.add(typeName);
           } else {
             configTypesNotSelected.add(typeName);
@@ -274,7 +277,7 @@ public class UpgradeCatalog252 extends AbstractUpgradeCatalog {
         // Due to the ordering, eliminate any configs with at least one selected.
         configTypesNotSelected.removeAll(configTypesWithAtLeastOneSelected);
         if (!configTypesNotSelected.isEmpty()) {
-          LOG.info("The following config types have config mappings which don't have at least one as selected. {}", StringUtils.join(configTypesNotSelected, ", "));
+          LOG.info("The following config types have entries which are not enabled: {}", StringUtils.join(configTypesNotSelected, ", "));
 
           LOG.info("Filtering only config types these config types: {}", StringUtils.join(configTypesToEnsureSelected, ", "));
           // Get the intersection with a subset of configs that are allowed to be selected during the migration.
@@ -282,19 +285,19 @@ public class UpgradeCatalog252 extends AbstractUpgradeCatalog {
         }
 
         if (!configTypesNotSelected.isEmpty()) {
-          LOG.info("The following config types have config mappings which don't have at least one as selected. {}", StringUtils.join(configTypesNotSelected, ", "));
+          LOG.info("The following config types have entries which don't have at least one as selected. {}", StringUtils.join(configTypesNotSelected, ", "));
 
           for (String typeName : configTypesNotSelected) {
-            ClusterConfigMappingEntity clusterConfigMappingWithGreatestTimeStamp = null;
+            ClusterConfigEntity clusterConfigMappingWithGreatestTimeStamp = null;
 
-            for (ClusterConfigMappingEntity clusterConfigMappingEntity : configMappingEntities) {
-              if (typeName.equals(clusterConfigMappingEntity.getType())) {
+            for (ClusterConfigEntity clusterConfigEntity : configEntities) {
+              if (typeName.equals(clusterConfigEntity.getType())) {
 
                 if (null == clusterConfigMappingWithGreatestTimeStamp) {
-                  clusterConfigMappingWithGreatestTimeStamp = clusterConfigMappingEntity;
+                  clusterConfigMappingWithGreatestTimeStamp = clusterConfigEntity;
                 } else {
-                  if (clusterConfigMappingEntity.getCreateTimestamp() >= clusterConfigMappingWithGreatestTimeStamp.getCreateTimestamp()) {
-                    clusterConfigMappingWithGreatestTimeStamp = clusterConfigMappingEntity;
+                  if (clusterConfigEntity.getTimestamp() >= clusterConfigMappingWithGreatestTimeStamp.getTimestamp()) {
+                    clusterConfigMappingWithGreatestTimeStamp = clusterConfigEntity;
                   }
                 }
               }
@@ -302,9 +305,9 @@ public class UpgradeCatalog252 extends AbstractUpgradeCatalog {
 
             if (null != clusterConfigMappingWithGreatestTimeStamp) {
               LOG.info("Saving. Config type {} has a mapping with tag {} and greatest timestamp {} that is not selected, so will mark it selected.",
-                  typeName, clusterConfigMappingWithGreatestTimeStamp.getTag(), clusterConfigMappingWithGreatestTimeStamp.getCreateTimestamp());
+                  typeName, clusterConfigMappingWithGreatestTimeStamp.getTag(), clusterConfigMappingWithGreatestTimeStamp.getTimestamp());
               atLeastOneChanged = true;
-              clusterConfigMappingWithGreatestTimeStamp.setSelected(1);
+              clusterConfigMappingWithGreatestTimeStamp.setSelected(true);
             }
           }
         } else {
@@ -313,7 +316,7 @@ public class UpgradeCatalog252 extends AbstractUpgradeCatalog {
       }
 
       if (atLeastOneChanged) {
-        clusterDAO.mergeConfigMappings(configMappingEntities);
+        clusterDAO.merge(clusterEntity);
       }
     }
   }

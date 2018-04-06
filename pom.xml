@@ -21,12 +21,12 @@
   <artifactId>ambari</artifactId>
   <packaging>pom</packaging>
   <name>Ambari Main</name>
-  <version>2.5.2.0.0</version>
+  <version>2.6.1.0-100</version>
   <description>Ambari</description>
   <url>http://ambari.apache.org/</url>
   <scm>
-    <url>https://github.com/bazaarvoice/ambari</url>
-    <connection>scm:git:git://git@github.com/bazaarvoice/ambari.git</connection>
+    <url>https://github.com/apache/ambari</url>
+    <connection>scm:git:https://git-wip-us.apache.org/repos/asf/ambari.git</connection>
   </scm>
   <licenses>
     <license>
@@ -146,7 +146,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>2.19</version>
+          <version>2.20</version>
         </plugin>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
@@ -306,7 +306,10 @@
             <exclude>ambari-common/src/main/python/jinja2/**</exclude>
             <!--Simplejson library (MIT license)-->
             <exclude>ambari-common/src/main/python/ambari_simplejson/**</exclude>
-
+            <!--Subprocess32 library (PSF license)-->
+            <exclude>ambari-common/src/main/python/ambari_commons/subprocess32.py</exclude>
+            <exclude>ambari-common/src/main/python/ambari_commons/_posixsubprocess.so</exclude>
+            
             <exclude>ambari-web/node_modules/**</exclude>
 
             <!--Contributions-->
@@ -360,9 +363,10 @@
             <exclude>contrib/views/slider/src/main/resources/ui/app/assets/javascripts/**</exclude>
             <exclude>contrib/views/slider/src/main/resources/ui/bower_components/**</exclude>
             <exclude>contrib/views/slider/src/main/resources/ui/runner.js</exclude>
-	          <exclude>contrib/views/storm/src/main/resources/libs/**</exclude>
-            <exclude>contrib/views/storm/src/main/resources/styles/default.css</exclude>
-            <exclude>contrib/views/storm/src/main/resources/templates/**</exclude>
+            <exclude>contrib/views/storm/src/main/resources/ui/.*</exclude>
+            <exclude>contrib/views/storm/src/main/resources/ui/node_modules/**</exclude>
+            <exclude>contrib/views/storm/src/main/resources/ui/public/**</exclude>
+            <exclude>contrib/views/storm/src/main/resources/ui/app/styles/**</exclude>
             <exclude>contrib/addons/package/deb/nagios_addon_deb_control</exclude>
             <exclude>contrib/addons/src/addOns/nagios/conf.d/hdp_mon_nagios_addons.conf</exclude>
             <exclude>contrib/views/*/.classpath</exclude>
@@ -478,8 +482,6 @@
         <module>ambari-server</module>
         <module>ambari-funtest</module>
         <module>ambari-agent</module>
-        <module>ambari-client</module>
-        <module>ambari-shell</module>
         <module>ambari-logsearch</module>
       </modules>
     </profile>
@@ -500,8 +502,6 @@
         <module>ambari-server</module>
         <module>ambari-funtest</module>
         <module>ambari-agent</module>
-        <module>ambari-client</module>
-        <module>ambari-shell</module>
       </modules>
     </profile>
     <profile>
@@ -514,8 +514,6 @@
         <module>ambari-server</module>
         <module>ambari-funtest</module>
         <module>ambari-agent</module>
-        <module>ambari-client</module>
-        <module>ambari-shell</module>
         <module>ambari-logsearch</module>
       </modules>
     </profile>
@@ -535,8 +533,6 @@
         <module>ambari-server</module>
         <module>ambari-funtest</module>
         <module>ambari-agent</module>
-        <module>ambari-client</module>
-        <module>ambari-shell</module>
         <module>ambari-logsearch</module>
         </modules>
     </profile>
@@ -562,8 +558,6 @@
         <module>ambari-server</module>
         <module>ambari-funtest</module>
         <module>ambari-agent</module>
-        <module>ambari-client</module>
-        <module>ambari-shell</module>
         </modules>
     </profile>
     <profile>

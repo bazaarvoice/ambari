@@ -19,11 +19,14 @@ package org.apache.ambari.server.checks;
 
 
 import static com.google.common.collect.Lists.newArrayList;
+import static org.easymock.EasyMock.anyBoolean;
+import static org.easymock.EasyMock.anyLong;
+import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.anyString;
 import static org.easymock.EasyMock.createNiceMock;
 import static org.easymock.EasyMock.createStrictMock;
-
 import static org.easymock.EasyMock.expect;
+import static org.easymock.EasyMock.expectLastCall;
 import static org.easymock.EasyMock.replay;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -33,23 +36,29 @@ import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import javax.persistence.EntityManager;
+import javax.persistence.TypedQuery;
 
 import org.apache.ambari.server.api.services.AmbariMetaInfo;
 import org.apache.ambari.server.configuration.Configuration;
 import org.apache.ambari.server.orm.DBAccessor;
+import org.apache.ambari.server.orm.dao.ClusterDAO;
+import org.apache.ambari.server.orm.entities.ClusterConfigEntity;
 import org.apache.ambari.server.stack.StackManagerFactory;
 import org.apache.ambari.server.state.Cluster;
 import org.apache.ambari.server.state.Clusters;
 import org.apache.ambari.server.state.Host;
+import org.apache.ambari.server.state.Service;
 import org.apache.ambari.server.state.ServiceInfo;
 import org.apache.ambari.server.state.configgroup.ConfigGroup;
 import org.apache.ambari.server.state.stack.OsFamily;
+import org.apache.commons.collections.MapUtils;
 import org.easymock.EasyMockSupport;
 import org.junit.Assert;
 import org.junit.Test;
@@ -62,45 +71,7 @@ import com.google.inject.Injector;
 
 public class DatabaseConsistencyCheckHelperTest {
 
-  @Test
-  public void testCheckForNotMappedConfigs() throws Exception {
-    EasyMockSupport easyMockSupport = new EasyMockSupport();
 
-    final DBAccessor mockDBDbAccessor = easyMockSupport.createNiceMock(DBAccessor.class);
-    final Connection mockConnection = easyMockSupport.createNiceMock(Connection.class);
-    final ResultSet mockResultSet = easyMockSupport.createNiceMock(ResultSet.class);
-    final Statement mockStatement = easyMockSupport.createNiceMock(Statement.class);
-
-    final StackManagerFactory mockStackManagerFactory = easyMockSupport.createNiceMock(StackManagerFactory.class);
-    final EntityManager mockEntityManager = easyMockSupport.createNiceMock(EntityManager.class);
-    final Clusters mockClusters = easyMockSupport.createNiceMock(Clusters.class);
-    final OsFamily mockOSFamily = easyMockSupport.createNiceMock(OsFamily.class);
-    final Injector mockInjector = Guice.createInjector(new AbstractModule() {
-      @Override
-      protected void configure() {
-
-        bind(StackManagerFactory.class).toInstance(mockStackManagerFactory);
-        bind(EntityManager.class).toInstance(mockEntityManager);
-        bind(DBAccessor.class).toInstance(mockDBDbAccessor);
-        bind(Clusters.class).toInstance(mockClusters);
-        bind(OsFamily.class).toInstance(mockOSFamily);
-      }
-    });
-
-
-
-    expect(mockConnection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE)).andReturn(mockStatement);
-    expect(mockStatement.executeQuery("select type_name from clusterconfig where type_name not in (select type_name from clusterconfigmapping)")).andReturn(mockResultSet);
-
-    DatabaseConsistencyCheckHelper.setInjector(mockInjector);
-    DatabaseConsistencyCheckHelper.setConnection(mockConnection);
-
-    easyMockSupport.replayAll();
-
-    DatabaseConsistencyCheckHelper.checkForNotMappedConfigsToCluster();
-
-    easyMockSupport.verifyAll();
-  }
 
   @Test
   public void testCheckForConfigsSelectedMoreThanOnce() throws Exception {
@@ -128,10 +99,10 @@ public class DatabaseConsistencyCheckHelperTest {
     });
 
     expect(mockConnection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE)).andReturn(mockStatement);
-    expect(mockStatement.executeQuery("select c.cluster_name, ccm.type_name from clusterconfigmapping ccm " +
-            "join clusters c on ccm.cluster_id=c.cluster_id " +
-            "group by c.cluster_name, ccm.type_name " +
-            "having sum(selected) > 1")).andReturn(mockResultSet);
+    expect(mockStatement.executeQuery("select c.cluster_name, cc.type_name from clusterconfig cc " +
+            "join clusters c on cc.cluster_id=c.cluster_id " +
+            "group by c.cluster_name, cc.type_name " +
+            "having sum(cc.selected) > 1")).andReturn(mockResultSet);
 
 
 
@@ -186,6 +157,69 @@ public class DatabaseConsistencyCheckHelperTest {
     DatabaseConsistencyCheckHelper.checkForHostsWithoutState();
 
     easyMockSupport.verifyAll();
+  }
+
+  @Test
+  public void testCheckTopologyTablesAreConsistent() throws Exception {
+    testCheckTopologyTablesConsistent(2);
+    Assert.assertFalse(DatabaseConsistencyCheckHelper.getLastCheckResult().isErrorOrWarning());
+  }
+
+  @Test
+  public void testCheckTopologyTablesAreNotConsistent() throws Exception {
+    testCheckTopologyTablesConsistent(1);
+    Assert.assertTrue(DatabaseConsistencyCheckHelper.getLastCheckResult().isErrorOrWarning());
+  }
+
+  private void testCheckTopologyTablesConsistent(int resultCount) throws Exception {
+    EasyMockSupport easyMockSupport = new EasyMockSupport();
+
+    final DBAccessor mockDBDbAccessor = easyMockSupport.createNiceMock(DBAccessor.class);
+    final Connection mockConnection = easyMockSupport.createNiceMock(Connection.class);
+    final ResultSet mockCountResultSet = easyMockSupport.createNiceMock(ResultSet.class);
+    final ResultSet mockJoinResultSet = easyMockSupport.createNiceMock(ResultSet.class);
+    final Statement mockStatement = easyMockSupport.createNiceMock(Statement.class);
+
+    final StackManagerFactory mockStackManagerFactory = easyMockSupport.createNiceMock(StackManagerFactory.class);
+    final EntityManager mockEntityManager = easyMockSupport.createNiceMock(EntityManager.class);
+    final Clusters mockClusters = easyMockSupport.createNiceMock(Clusters.class);
+    final OsFamily mockOSFamily = easyMockSupport.createNiceMock(OsFamily.class);
+    final Injector mockInjector = Guice.createInjector(new AbstractModule() {
+      @Override
+      protected void configure() {
+
+        bind(StackManagerFactory.class).toInstance(mockStackManagerFactory);
+        bind(EntityManager.class).toInstance(mockEntityManager);
+        bind(DBAccessor.class).toInstance(mockDBDbAccessor);
+        bind(Clusters.class).toInstance(mockClusters);
+        bind(OsFamily.class).toInstance(mockOSFamily);
+      }
+    });
+
+    expect(mockConnection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE)).andReturn(mockStatement);
+    expect(mockCountResultSet.next()).andReturn(true).once();
+    expect(mockCountResultSet.getInt(1)).andReturn(2);
+    expect(mockJoinResultSet.next()).andReturn(true).once();
+    expect(mockJoinResultSet.getInt(1)).andReturn(resultCount);
+    expect(mockStatement.executeQuery("select count(tpr.id) from topology_request tpr")).andReturn(mockCountResultSet);
+    expect(mockStatement.executeQuery("select count(DISTINCT tpr.id) from topology_request tpr join " +
+            "topology_logical_request tlr on tpr.id = tlr.request_id")).andReturn(mockJoinResultSet);
+
+    expect(mockStatement.executeQuery("select count(thr.id) from topology_host_request thr")).andReturn(mockCountResultSet);
+    expect(mockStatement.executeQuery("select count(DISTINCT thr.id) from topology_host_request thr join " +
+            "topology_host_task tht on thr.id = tht.host_request_id join topology_logical_task " +
+            "tlt on tht.id = tlt.host_task_id")).andReturn(mockJoinResultSet);
+
+    DatabaseConsistencyCheckHelper.setInjector(mockInjector);
+    DatabaseConsistencyCheckHelper.setConnection(mockConnection);
+
+    easyMockSupport.replayAll();
+
+
+    DatabaseConsistencyCheckHelper.checkTopologyTables();
+
+    easyMockSupport.verifyAll();
+
   }
 
   @Test
@@ -295,11 +329,10 @@ public class DatabaseConsistencyCheckHelperTest {
             "join serviceconfig sc on cs.service_name=sc.service_name and cs.cluster_id=sc.cluster_id " +
             "join serviceconfigmapping scm on sc.service_config_id=scm.service_config_id " +
             "join clusterconfig cc on scm.config_id=cc.config_id and cc.cluster_id=sc.cluster_id " +
-            "join clusterconfigmapping ccm on cc.type_name=ccm.type_name and cc.version_tag=ccm.version_tag and cc.cluster_id=ccm.cluster_id " +
-            "join clusters c on ccm.cluster_id=c.cluster_id " +
+            "join clusters c on cc.cluster_id=c.cluster_id " +
             "where sc.group_id is null and sc.service_config_id = (select max(service_config_id) from serviceconfig sc2 where sc2.service_name=sc.service_name and sc2.cluster_id=sc.cluster_id) " +
             "group by c.cluster_name, cs.service_name, cc.type_name " +
-            "having sum(ccm.selected) < 1")).andReturn(mockResultSet);
+            "having sum(cc.selected) < 1")).andReturn(mockResultSet);
 
     DatabaseConsistencyCheckHelper.setInjector(mockInjector);
     DatabaseConsistencyCheckHelper.setConnection(mockConnection);
@@ -496,11 +529,10 @@ public class DatabaseConsistencyCheckHelperTest {
         "join serviceconfig sc on cs.service_name=sc.service_name and cs.cluster_id=sc.cluster_id " +
         "join serviceconfigmapping scm on sc.service_config_id=scm.service_config_id " +
         "join clusterconfig cc on scm.config_id=cc.config_id and cc.cluster_id=sc.cluster_id " +
-        "join clusterconfigmapping ccm on cc.type_name=ccm.type_name and cc.version_tag=ccm.version_tag and cc.cluster_id=ccm.cluster_id " +
-        "join clusters c on ccm.cluster_id=c.cluster_id " +
+        "join clusters c on cc.cluster_id=c.cluster_id " +
         "where sc.group_id is null and sc.service_config_id = (select max(service_config_id) from serviceconfig sc2 where sc2.service_name=sc.service_name and sc2.cluster_id=sc.cluster_id) " +
         "group by c.cluster_name, cs.service_name, cc.type_name " +
-        "having sum(ccm.selected) < 1")).andReturn(mockResultSet);
+        "having sum(cc.selected) < 1")).andReturn(mockResultSet);
 
     DatabaseConsistencyCheckHelper.setInjector(mockInjector);
     DatabaseConsistencyCheckHelper.setConnection(mockConnection);
@@ -519,7 +551,6 @@ public class DatabaseConsistencyCheckHelperTest {
     Assert.assertFalse("No errors should have been triggered.",
         DatabaseConsistencyCheckHelper.getLastCheckResult().isError());
   }
-
 
   @Test
   public void testCheckForLargeTables() throws Exception {
@@ -601,7 +632,6 @@ public class DatabaseConsistencyCheckHelperTest {
     final Injector mockInjector = Guice.createInjector(new AbstractModule() {
       @Override
       protected void configure() {
-
         bind(StackManagerFactory.class).toInstance(mockStackManagerFactory);
         bind(EntityManager.class).toInstance(mockEntityManager);
         bind(DBAccessor.class).toInstance(mockDBDbAccessor);
@@ -659,5 +689,144 @@ public class DatabaseConsistencyCheckHelperTest {
     Assert.assertEquals(1, hostIds.size());
     Assert.assertEquals(1L, hostIds.keySet().iterator().next().longValue());
     Assert.assertEquals(2L, hostIds.get(1L).iterator().next().longValue());
+  }
+
+  @Test
+  public void testConfigGroupForDeletedServices() throws Exception {
+    EasyMockSupport easyMockSupport = new EasyMockSupport();
+
+    final DBAccessor mockDBDbAccessor = easyMockSupport.createNiceMock(DBAccessor.class);
+
+    final StackManagerFactory mockStackManagerFactory = easyMockSupport.createNiceMock(StackManagerFactory.class);
+    final EntityManager mockEntityManager = easyMockSupport.createNiceMock(EntityManager.class);
+    final Clusters mockClusters = easyMockSupport.createNiceMock(Clusters.class);
+    final OsFamily mockOSFamily = easyMockSupport.createNiceMock(OsFamily.class);
+    final Injector mockInjector = Guice.createInjector(new AbstractModule() {
+      @Override
+      protected void configure() {
+        bind(StackManagerFactory.class).toInstance(mockStackManagerFactory);
+        bind(EntityManager.class).toInstance(mockEntityManager);
+        bind(DBAccessor.class).toInstance(mockDBDbAccessor);
+        bind(Clusters.class).toInstance(mockClusters);
+        bind(OsFamily.class).toInstance(mockOSFamily);
+      }
+    });
+
+    Map<String, Cluster> clusters = new HashMap<>();
+    Cluster cluster = easyMockSupport.createNiceMock(Cluster.class);
+    clusters.put("c1", cluster);
+    expect(mockClusters.getClusters()).andReturn(clusters).anyTimes();
+
+    Map<Long, ConfigGroup> configGroupMap = new HashMap<>();
+    ConfigGroup cg1 = easyMockSupport.createNiceMock(ConfigGroup.class);
+    ConfigGroup cg2 = easyMockSupport.createNiceMock(ConfigGroup.class);
+    configGroupMap.put(1L, cg1);
+    configGroupMap.put(2L, cg2);
+
+    expect(cluster.getConfigGroups()).andReturn(configGroupMap).anyTimes();
+    expect(cg1.getName()).andReturn("cg1").anyTimes();
+    expect(cg1.getId()).andReturn(1L).anyTimes();
+    expect(cg1.getServiceName()).andReturn("YARN").anyTimes();
+    expect(cg2.getServiceName()).andReturn("HDFS").anyTimes();
+
+    expect(cluster.getClusterName()).andReturn("c1").anyTimes();
+
+    Service service = easyMockSupport.createNiceMock(Service.class);
+    Map<String, Service> services = new HashMap<>();
+    services.put("HDFS", service);
+    expect(cluster.getServices()).andReturn(services).anyTimes();
+
+    expect(cg1.getClusterName()).andReturn("c1");
+    expect(mockClusters.getCluster("c1")).andReturn(cluster);
+    cluster.deleteConfigGroup(1L);
+    expectLastCall();
+
+    DatabaseConsistencyCheckHelper.setInjector(mockInjector);
+
+    easyMockSupport.replayAll();
+
+    Map<Long, ConfigGroup> configGroups = DatabaseConsistencyCheckHelper.checkConfigGroupsForDeletedServices(true);
+    DatabaseConsistencyCheckHelper.fixConfigGroupsForDeletedServices();
+
+    easyMockSupport.verifyAll();
+
+    Assert.assertFalse(MapUtils.isEmpty(configGroups));
+    Assert.assertEquals(1, configGroups.size());
+    Assert.assertEquals(1L, configGroups.values().iterator().next().getId().longValue());
+  }
+
+  @Test
+  public void testFixConfigsSelectedMoreThanOnce() throws Exception {
+    EasyMockSupport easyMockSupport = new EasyMockSupport();
+
+    final Connection mockConnection = easyMockSupport.createNiceMock(Connection.class);
+    final ClusterDAO clusterDAO = easyMockSupport.createNiceMock(ClusterDAO.class);
+    final DBAccessor mockDBDbAccessor = easyMockSupport.createNiceMock(DBAccessor.class);
+
+    final EntityManager mockEntityManager = easyMockSupport.createNiceMock(EntityManager.class);
+    final Clusters mockClusters = easyMockSupport.createNiceMock(Clusters.class);
+    final ResultSet mockResultSet = easyMockSupport.createNiceMock(ResultSet.class);
+    final Statement mockStatement = easyMockSupport.createNiceMock(Statement.class);
+
+    final StackManagerFactory mockStackManagerFactory = easyMockSupport.createNiceMock(StackManagerFactory.class);
+    final OsFamily mockOSFamily = easyMockSupport.createNiceMock(OsFamily.class);
+
+    final Injector mockInjector = Guice.createInjector(new AbstractModule() {
+      @Override
+      protected void configure() {
+        bind(EntityManager.class).toInstance(mockEntityManager);
+        bind(Clusters.class).toInstance(mockClusters);
+        bind(ClusterDAO.class).toInstance(clusterDAO);
+        bind(DBAccessor.class).toInstance(mockDBDbAccessor);
+        bind(StackManagerFactory.class).toInstance(mockStackManagerFactory);
+        bind(OsFamily.class).toInstance(mockOSFamily);
+      }
+    });
+
+
+    expect(mockConnection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE)).andReturn(mockStatement);
+    expect(mockStatement.executeQuery("select c.cluster_name, cc.type_name from clusterconfig cc " +
+        "join clusters c on cc.cluster_id=c.cluster_id " +
+        "group by c.cluster_name, cc.type_name " +
+        "having sum(cc.selected) > 1")).andReturn(mockResultSet);
+    expect(mockResultSet.next()).andReturn(true).once();
+    expect(mockResultSet.getString("cluster_name")).andReturn("123").once();
+    expect(mockResultSet.getString("type_name")).andReturn("type1").once();
+    expect(mockResultSet.next()).andReturn(false).once();
+
+    Cluster clusterMock = easyMockSupport.createNiceMock(Cluster.class);
+    expect(mockClusters.getCluster("123")).andReturn(clusterMock);
+
+    expect(clusterMock.getClusterId()).andReturn(123L).once();
+
+    ClusterConfigEntity clusterConfigEntity1 = easyMockSupport.createNiceMock(ClusterConfigEntity.class);
+    ClusterConfigEntity clusterConfigEntity2 = easyMockSupport.createNiceMock(ClusterConfigEntity.class);
+    expect(clusterConfigEntity1.getType()).andReturn("type1").anyTimes();
+    expect(clusterConfigEntity1.getSelectedTimestamp()).andReturn(123L);
+    clusterConfigEntity1.setSelected(false);
+    expectLastCall().once();
+
+    expect(clusterConfigEntity2.getType()).andReturn("type1").anyTimes();
+    expect(clusterConfigEntity2.getSelectedTimestamp()).andReturn(321L);
+    clusterConfigEntity2.setSelected(false);
+    expectLastCall().once();
+    clusterConfigEntity2.setSelected(true);
+    expectLastCall().once();
+
+    TypedQuery queryMock = easyMockSupport.createNiceMock(TypedQuery.class);
+    expect(mockEntityManager.createNamedQuery(anyString(), anyObject(Class.class))).andReturn(queryMock).anyTimes();
+    expect(queryMock.setParameter(anyString(), anyString())).andReturn(queryMock).once();
+    expect(queryMock.setParameter(anyString(), anyLong())).andReturn(queryMock).once();
+    expect(queryMock.getResultList()).andReturn(Arrays.asList(clusterConfigEntity1, clusterConfigEntity2)).once();
+    expect(clusterDAO.merge(anyObject(ClusterConfigEntity.class), anyBoolean())).andReturn(null).times(3);
+
+    DatabaseConsistencyCheckHelper.setInjector(mockInjector);
+    DatabaseConsistencyCheckHelper.setConnection(mockConnection);
+
+    easyMockSupport.replayAll();
+
+    DatabaseConsistencyCheckHelper.fixConfigsSelectedMoreThanOnce();
+
+    easyMockSupport.verifyAll();
   }
 }

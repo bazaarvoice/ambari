@@ -24,6 +24,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.Writer;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -91,6 +92,7 @@ import org.apache.commons.lang.math.NumberUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Charsets;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
@@ -385,7 +387,7 @@ public class Configuration {
    */
   @Markdown(description = "The location and name of the Python script used to bootstrap new Ambari Agent hosts.")
   public static final ConfigurationProperty<String> BOOTSTRAP_SCRIPT = new ConfigurationProperty<>(
-      "bootstrap.script", AmbariPath.getPath("/usr/lib/python2.6/site-packages/ambari_server/bootstrap.py"));
+      "bootstrap.script", AmbariPath.getPath("/usr/lib/ambari-server/lib/ambari_server/bootstrap.py"));
 
   /**
    * The location and name of the Python script executed on the Ambari Agent
@@ -394,7 +396,7 @@ public class Configuration {
   @Markdown(description = "The location and name of the Python script executed on the Ambari Agent host during the bootstrap process.")
   public static final ConfigurationProperty<String> BOOTSTRAP_SETUP_AGENT_SCRIPT = new ConfigurationProperty<>(
       "bootstrap.setup_agent.script",
-      AmbariPath.getPath("/usr/lib/python2.6/site-packages/ambari_server/setupAgent.py"));
+      AmbariPath.getPath("/usr/lib/ambari-server/lib/ambari_server/setupAgent.py"));
 
   /**
    * The password to set on the {@code AMBARI_PASSPHRASE} environment variable
@@ -724,6 +726,14 @@ public class Configuration {
       examples = { "/var/lib/ambari-server/resources/version" })
   public static final ConfigurationProperty<String> SERVER_VERSION_FILE = new ConfigurationProperty<>(
       "server.version.file", null);
+
+  /**
+   * Whether user accepted GPL license
+   */
+  @Markdown(
+      description = "Whether user accepted GPL license.")
+  public static final ConfigurationProperty<Boolean> GPL_LICENSE_ACCEPTED = new ConfigurationProperty<>(
+      "gpl.license.accepted", false);
 
   /**
    * The location of the JDK on the Ambari Agent hosts.
@@ -1779,6 +1789,27 @@ public class Configuration {
       "server.tmp.dir", AmbariPath.getPath("/var/lib/ambari-server/tmp"));
 
   /**
+   * Request logs path .
+   */
+  @Markdown(description = "The location on the Ambari Server where request logs can be created.")
+  public static final ConfigurationProperty<String> REQUEST_LOGPATH = new ConfigurationProperty<>(
+      "server.requestlogs.path", null);
+
+  /**
+   * The pattern of request  logs .
+   */
+  @Markdown(description = "The pattern of request log file name")
+  public static final ConfigurationProperty<String> REQUEST_LOGNAMEPATTERN = new ConfigurationProperty<>(
+          "server.requestlogs.namepattern", "ambari-access-yyyy_mm_dd.log");
+
+  /**
+   * The number of days request logs can be retained.
+   */
+  @Markdown(description = "The number of days that request log would be retained.")
+  public static final ConfigurationProperty<Integer> REQUEST_LOG_RETAINDAYS = new ConfigurationProperty<>(
+          "server.requestlogs.retaindays", 15);
+
+  /**
    * The time, in {@link TimeUnit#MILLISECONDS}, until an external script is killed.
    */
   @Markdown(description = "The time, in milliseconds, until an external script is killed.")
@@ -2000,6 +2031,10 @@ public class Configuration {
   @Markdown(description = "Determines whether Ambari Agent instances have already have the necessary stack software installed")
   public static final ConfigurationProperty<String> SYS_PREPPED_HOSTS = new ConfigurationProperty<>(
       "packages.pre.installed", "false");
+
+  @Markdown(description = "This property is used in specific testing circumstances only. Its use otherwise will lead to very unpredictable results with repository management and package installation")
+  public static final ConfigurationProperty<String> LEGACY_OVERRIDE = new ConfigurationProperty<>(
+    "repositories.legacy-override.enabled", "false");
 
   private static final String LDAP_ADMIN_GROUP_MAPPING_MEMBER_ATTR_DEFAULT = "";
 
@@ -2561,6 +2596,12 @@ public class Configuration {
   // Ambari server log4j file name
   public static final String AMBARI_LOG_FILE = "log4j.properties";
 
+  /**
+   * Default value of Max number of tasks to schedule in parallel for upgrades.
+   */
+  @Markdown(description = "Default value of max number of tasks to schedule in parallel for upgrades. Upgrade packs can override this value.")
+  public static final ConfigurationProperty<Integer> DEFAULT_MAX_DEGREE_OF_PARALLELISM_FOR_UPGRADES = new ConfigurationProperty<>(
+    "stack.upgrade.default.parallelism", 100);
 
   /**
    * The number of tasks that can be queried from the database at once In the
@@ -2997,6 +3038,8 @@ public class Configuration {
     configsMap.put(AGENT_PACKAGE_PARALLEL_COMMANDS_LIMIT.getKey(), getProperty(AGENT_PACKAGE_PARALLEL_COMMANDS_LIMIT));
     configsMap.put(PROXY_ALLOWED_HOST_PORTS.getKey(), getProperty(PROXY_ALLOWED_HOST_PORTS));
     configsMap.put(TLS_EPHEMERAL_DH_KEY_SIZE.getKey(), getProperty(TLS_EPHEMERAL_DH_KEY_SIZE));
+    configsMap.put(REQUEST_LOGPATH.getKey(), getProperty(REQUEST_LOGPATH));
+    configsMap.put(REQUEST_LOG_RETAINDAYS.getKey(), getProperty(REQUEST_LOG_RETAINDAYS));
 
     File passFile = new File(
         configsMap.get(SRVR_KSTR_DIR.getKey()) + File.separator
@@ -3163,7 +3206,7 @@ public class Configuration {
 
     // load the properties
     try {
-      properties.load(inputStream);
+      properties.load(new InputStreamReader(inputStream, Charsets.UTF_8));
       inputStream.close();
     } catch (FileNotFoundException fnf) {
       LOG.info("No configuration file " + CONFIG_FILE + " found in classpath.", fnf);
@@ -3344,6 +3387,15 @@ public class Configuration {
 
   public String areHostsSysPrepped(){
     return getProperty(SYS_PREPPED_HOSTS);
+  }
+
+  /**
+   * Return {@code true} if we forced to work with legacy repositories
+   *
+   * @return {@link Boolean}
+   */
+  public boolean arePackagesLegacyOverridden(){
+    return getProperty(LEGACY_OVERRIDE).equalsIgnoreCase("true");
   }
 
   public CommandExecutionType getStageExecutionType(){
@@ -5283,6 +5335,10 @@ public class Configuration {
     return NumberUtils.toInt(getProperty(VERSION_DEFINITION_READ_TIMEOUT));
   }
 
+  public Boolean getGplLicenseAccepted(){
+    return Boolean.valueOf(getProperty(GPL_LICENSE_ACCEPTED));
+  }
+
   public String getAgentStackRetryOnInstallCount(){
     return getProperty(AGENT_STACK_RETRY_COUNT);
   }
@@ -5516,6 +5572,13 @@ public class Configuration {
       throw new IllegalArgumentException("Invalid " + TLS_EPHEMERAL_DH_KEY_SIZE + " " + getProperty(TLS_EPHEMERAL_DH_KEY_SIZE));
     }
     return keySize;
+  }
+
+  /**
+   * @return default value of number of tasks to run in parallel during upgrades
+   */
+  public int getDefaultMaxParallelismForUpgrades() {
+    return Integer.parseInt(getProperty(DEFAULT_MAX_DEGREE_OF_PARALLELISM_FOR_UPGRADES));
   }
 
   /**

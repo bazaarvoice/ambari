@@ -25,7 +25,7 @@ from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from resource_management.libraries.functions import format
 from resource_management.libraries.functions import StackFeature
-from resource_management.libraries.functions.stack_features import check_stack_feature
+from resource_management.libraries.functions import stack_features
 from resource_management.libraries.functions.version import format_stack_version
 from resource_management.libraries.functions.default import default
 from resource_management.libraries.functions import get_kinit_path
@@ -73,12 +73,10 @@ else:
   mariadb_redhat_support = str(mariadb_redhat_support)
   Logger.info('MariaDB RedHat Support: %s' % mariadb_redhat_support)
   process_name = 'mysqld'
-  if OSCheck.is_suse_family() or OSCheck.is_ubuntu_family():
-    daemon_name = 'mysql'
-  elif OSCheck.is_redhat_family() and int(OSCheck.get_os_major_version()) >= 7 and mariadb_redhat_support.lower() == "true":
-    daemon_name = 'mariadb'
-  else:
-    daemon_name = 'mysqld'
+
+  
+  SERVICE_FILE_TEMPLATES = ['/etc/init.d/{0}', '/usr/lib/systemd/system/{0}.service']
+  POSSIBLE_DAEMON_NAMES = ['mysql', 'mysqld', 'mariadb']
 
   # Security related/required params
   hostname = config['hostname']
@@ -103,17 +101,17 @@ else:
   hive_conf_dir = format("{stack_root}/current/{component_directory}/conf")
   hive_client_conf_dir = format("{stack_root}/current/{component_directory}/conf")
 
-  if check_stack_feature(StackFeature.CONFIG_VERSIONING, stack_version_formatted_major):
+  if stack_features.check_stack_feature(StackFeature.CONFIG_VERSIONING, stack_version_formatted_major):
     hive_server_conf_dir = format("{stack_root}/current/{component_directory}/conf/conf.server")
     hive_conf_dir = hive_server_conf_dir
 
-  if check_stack_feature(StackFeature.HIVE_WEBHCAT_SPECIFIC_CONFIGS, stack_version_formatted_major):
+  if stack_features.check_stack_feature(StackFeature.HIVE_WEBHCAT_SPECIFIC_CONFIGS, stack_version_formatted_major):
     # this is NOT a typo. Configs for hcatalog/webhcat point to a
     # specific directory which is NOT called 'conf'
     webhcat_conf_dir = format("{stack_root}/current/hive-webhcat/etc/webhcat")
 
   # if stack version supports hive serve interactive
-  if check_stack_feature(StackFeature.HIVE_SERVER_INTERACTIVE, stack_version_formatted_major):
+  if stack_features.check_stack_feature(StackFeature.HIVE_SERVER_INTERACTIVE, stack_version_formatted_major):
     hive_server_interactive_conf_dir = format("{stack_root}/current/{component_directory_interactive}/conf/conf.server")
 
   hive_config_dir = hive_client_conf_dir

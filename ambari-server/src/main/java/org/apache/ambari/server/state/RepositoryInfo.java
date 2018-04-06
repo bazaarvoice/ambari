@@ -18,10 +18,19 @@
 
 package org.apache.ambari.server.state;
 
-import com.google.common.base.Objects;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
+
+import org.apache.ambari.annotations.Experimental;
+import org.apache.ambari.annotations.ExperimentalFeature;
 import org.apache.ambari.server.controller.RepositoryResponse;
+import org.apache.ambari.server.state.stack.RepoTag;
+import org.apache.commons.lang.StringUtils;
 
 import com.google.common.base.Function;
+import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 
 public class RepositoryInfo {
@@ -29,12 +38,18 @@ public class RepositoryInfo {
   private String osType;
   private String repoId;
   private String repoName;
+  private String distribution;
+  private String components;
   private String mirrorsList;
   private String defaultBaseUrl;
   private String latestBaseUrl;
   private boolean baseSaved = false;
   private boolean unique = false;
   private boolean ambariManagedRepositories = true;
+  @Experimental(feature = ExperimentalFeature.CUSTOM_SERVICE_REPOS,
+    comment = "Remove logic for handling custom service repos after enabling multi-mpack cluster deployment")
+  private List<String> applicableServices = new LinkedList<>();
+  private Set<RepoTag> tags = new HashSet<>();
 
   /**
    * @return the baseUrl
@@ -90,6 +105,22 @@ public class RepositoryInfo {
    */
   public void setRepoName(String repoName) {
     this.repoName = repoName;
+  }
+
+  public String getDistribution() {
+    return distribution;
+  }
+
+  public void setDistribution(String distribution) {
+    this.distribution = distribution;
+  }
+
+  public String getComponents() {
+    return components;
+  }
+
+  public void setComponents(String components) {
+    this.components = components;
   }
 
   /**
@@ -148,6 +179,18 @@ public class RepositoryInfo {
     baseSaved = saved;
   }
 
+  @Experimental(feature = ExperimentalFeature.CUSTOM_SERVICE_REPOS,
+    comment = "Remove logic for handling custom service repos after enabling multi-mpack cluster deployment")
+  public List<String> getApplicableServices() {
+    return applicableServices;
+  }
+
+  @Experimental(feature = ExperimentalFeature.CUSTOM_SERVICE_REPOS,
+    comment = "Remove logic for handling custom service repos after enabling multi-mpack cluster deployment")
+  public void setApplicableServices(List<String> applicableServices) {
+    this.applicableServices = applicableServices;
+  }
+
   @Override
   public String toString() {
     return "[ repoInfo: "
@@ -155,9 +198,12 @@ public class RepositoryInfo {
         + ", repoId=" + repoId
         + ", baseUrl=" + baseUrl
         + ", repoName=" + repoName
+        + ", distribution=" + distribution
+        + ", components=" + components
         + ", mirrorsList=" + mirrorsList
         + ", unique=" + unique
         + ", ambariManagedRepositories=" + ambariManagedRepositories
+        + ", applicableServices=" +  StringUtils.join(applicableServices, ",")
         + " ]";
   }
 
@@ -170,6 +216,8 @@ public class RepositoryInfo {
         Objects.equal(osType, that.osType) &&
         Objects.equal(repoId, that.repoId) &&
         Objects.equal(repoName, that.repoName) &&
+        Objects.equal(distribution, that.distribution) &&
+        Objects.equal(components, that.components) &&
         Objects.equal(mirrorsList, that.mirrorsList) &&
         Objects.equal(defaultBaseUrl, that.defaultBaseUrl) &&
         Objects.equal(latestBaseUrl, that.latestBaseUrl) &&
@@ -178,13 +226,15 @@ public class RepositoryInfo {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(baseUrl, osType, repoId, repoName, mirrorsList, defaultBaseUrl, latestBaseUrl, ambariManagedRepositories);
+    return Objects.hashCode(baseUrl, osType, repoId, repoName, distribution, components, mirrorsList, defaultBaseUrl,
+            latestBaseUrl, ambariManagedRepositories);
   }
 
   public RepositoryResponse convertToResponse()
   {
-    return new RepositoryResponse(getBaseUrl(), getOsType(), getRepoId(),
-        getRepoName(), getMirrorsList(), getDefaultBaseUrl(), getLatestBaseUrl());
+    return new RepositoryResponse(getBaseUrl(), getOsType(), getRepoId(), getRepoName(), getDistribution(),
+      getComponents(), getMirrorsList(), getDefaultBaseUrl(), getLatestBaseUrl(), getApplicableServices(),
+      getTags());
   }
 
   /**
@@ -252,4 +302,19 @@ public class RepositoryInfo {
   public void setAmbariManagedRepositories(boolean ambariManagedRepositories) {
     this.ambariManagedRepositories = ambariManagedRepositories;
   }
+
+  /**
+   * @return the tags for this repository
+   */
+  public Set<RepoTag> getTags() {
+    return tags;
+  }
+
+  /**
+   * @param repoTags the tags for this repository
+   */
+  public void setTags(Set<RepoTag> repoTags) {
+    tags = repoTags;
+  }
+
 }

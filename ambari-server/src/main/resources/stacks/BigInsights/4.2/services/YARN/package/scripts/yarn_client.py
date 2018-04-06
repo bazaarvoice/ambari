@@ -21,7 +21,6 @@ Ambari Agent
 
 import sys
 from resource_management import *
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 
 from yarn import yarn
@@ -40,16 +39,12 @@ class YarnClient(Script):
   def status(self, env):
     raise ClientComponentHasNoStatus()
 
-  def get_component_name(self):
-    return "hadoop-client"
-
   def pre_upgrade_restart(self, env, upgrade_type=None):
     import params
     env.set_params(params)
 
     if params.version and compare_versions(format_stack_version(params.version), '4.0.0.0') >= 0:
-      conf_select.select(params.stack_name, "hadoop", params.version)
-      stack_select.select("hadoop-client", params.version)
+      stack_select.select_packages(params.version)
       #Execute(format("iop-select set hadoop-client {version}"))
 
 if __name__ == "__main__":

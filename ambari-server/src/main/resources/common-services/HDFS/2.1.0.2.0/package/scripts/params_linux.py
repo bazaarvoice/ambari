@@ -40,7 +40,6 @@ from resource_management.libraries.functions.get_not_managed_resources import ge
 from resource_management.libraries.script.script import Script
 from resource_management.libraries.resources.hdfs_resource import HdfsResource
 from resource_management.libraries.functions.format_jvm_option import format_jvm_option
-from resource_management.libraries.functions.get_lzo_packages import get_lzo_packages
 from resource_management.libraries.functions.hdfs_utils import is_https_enabled_in_hdfs
 from resource_management.libraries.functions import is_empty
 from resource_management.libraries.functions.get_architecture import get_architecture
@@ -131,6 +130,10 @@ if stack_version_formatted and check_stack_feature(StackFeature.ROLLING_UPGRADE,
       hadoop_secure_dn_user = hdfs_user
     else:
       hadoop_secure_dn_user = '""'
+
+# Parameters for upgrade packs
+skip_namenode_save_namespace_express = default("/configurations/cluster-env/stack_upgrade_express_skip_namenode_save_namespace", False)
+skip_namenode_namedir_backup_express = default("/configurations/cluster-env/stack_upgrade_express_skip_backup_namenode_dir", False)
 
 ambari_libs_dir = "/var/lib/ambari-agent/lib"
 limits_conf_dir = "/etc/security/limits.d"
@@ -276,6 +279,8 @@ else:
 fs_checkpoint_dirs = default("/configurations/hdfs-site/dfs.namenode.checkpoint.dir", "").split(',')
 
 dfs_data_dirs = config['configurations']['hdfs-site']['dfs.datanode.data.dir']
+dfs_data_dirs_perm = default("/configurations/hdfs-site/dfs.datanode.data.dir.perm", "755")
+dfs_data_dirs_perm = int(dfs_data_dirs_perm, base=8) # convert int from octal representation
 
 data_dir_mount_file = "/var/lib/ambari-agent/data/datanode/dfs_data_dir_mount.hist"
 
@@ -381,12 +386,6 @@ HdfsResource = functools.partial(
   immutable_paths = get_not_managed_resources(),
   dfs_type = dfs_type
 )
-
-
-# The logic for LZO also exists in OOZIE's params.py
-io_compression_codecs = default("/configurations/core-site/io.compression.codecs", None)
-lzo_enabled = io_compression_codecs is not None and "com.hadoop.compression.lzo" in io_compression_codecs.lower()
-lzo_packages = get_lzo_packages(stack_version_unformatted)
   
 name_node_params = default("/commandParams/namenode", None)
 

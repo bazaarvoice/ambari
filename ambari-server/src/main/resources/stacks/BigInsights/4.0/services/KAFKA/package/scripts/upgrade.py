@@ -22,7 +22,6 @@ import os
 
 from resource_management import *
 from resource_management.core.resources.system import Execute
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from resource_management.libraries.functions.version import compare_versions, format_stack_version
 from resource_management.libraries.functions import format
@@ -45,9 +44,6 @@ def run_migration(env, upgrade_type):
   if params.upgrade_direction is None:
     raise Fail('Parameter "upgrade_direction" is missing.')
 
-  if params.upgrade_direction == Direction.DOWNGRADE and params.downgrade_from_version is None:
-    raise Fail('Parameter "downgrade_from_version" is missing.')
-
   if not params.security_enabled:
     Logger.info("Skip running the Kafka ACL migration script since cluster security is not enabled.")
     return
@@ -55,13 +51,11 @@ def run_migration(env, upgrade_type):
   Logger.info("Upgrade type: {0}, direction: {1}".format(str(upgrade_type), params.upgrade_direction))
 
   # If the schema upgrade script exists in the version upgrading to, then attempt to upgrade/downgrade it while still using the present bits.
-  kafka_acls_script = None
+  kafka_acls_script = format("/usr/hdp/{downgrade_from_version}/kafka/bin/kafka-acls.sh")
   command_suffix = ""
   if params.upgrade_direction == Direction.UPGRADE:
-    kafka_acls_script = format("/usr/hdp/{version}/kafka/bin/kafka-acls.sh")
     command_suffix = "--upgradeAcls"
   elif params.upgrade_direction == Direction.DOWNGRADE:
-    kafka_acls_script = format("/usr/hdp/{downgrade_from_version}/kafka/bin/kafka-acls.sh")
     command_suffix = "--downgradeAcls"
 
   if kafka_acls_script is not None:
@@ -80,9 +74,8 @@ def run_migration(env, upgrade_type):
       Logger.info("Did not find Kafka acls script: {0}".format(kafka_acls_script))
 
 
-def prestart(env, component):
+def prestart(env):
   import params
 
   if params.version and compare_versions(format_stack_version(params.version), '4.1.0.0') >= 0:
-    conf_select.select(params.stack_name, "kafka", params.version)
-    stack_select.select(component, params.version)
+    stack_select.select_packages(params.version)

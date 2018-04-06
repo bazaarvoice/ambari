@@ -62,6 +62,7 @@ public class FilterGrok extends Filter {
 
   private String sourceField = null;
   private boolean removeSourceField = true;
+  private boolean skipOnError = false;
 
   private Set<String> namedParamList = new HashSet<String>();
   private Set<String> multiLineamedParamList = new HashSet<String>();
@@ -80,6 +81,8 @@ public class FilterGrok extends Filter {
       sourceField = getStringValue("source_field");
       removeSourceField = getBooleanValue("remove_source_field",
         removeSourceField);
+      skipOnError = getBooleanValue("skip_on_error", false);
+
 
       LOG.info("init() done. grokPattern=" + messagePattern + ", multilinePattern=" + multilinePattern + ", " +
       getShortDescription());
@@ -87,11 +90,15 @@ public class FilterGrok extends Filter {
         LOG.error("message_pattern is not set for filter.");
         return;
       }
-      extractNamedParams(messagePattern, namedParamList);
 
       grokMessage = new Grok();
       loadPatterns(grokMessage);
       grokMessage.compile(messagePattern);
+      if (getBooleanValue("deep_extract", false)) {
+        extractNamedParams(grokMessage.getNamedRegexCollection());
+      } else {
+        extractNamedParams(messagePattern, namedParamList);
+      }
       if (!StringUtils.isEmpty(multilinePattern)) {
         extractNamedParams(multilinePattern, multiLineamedParamList);
 
@@ -106,6 +113,16 @@ public class FilterGrok extends Filter {
       grokMultiline = null;
     }
 
+  }
+
+  private void extractNamedParams(Map<String, String> namedRegexCollection) {
+    if (namedRegexCollection != null) {
+      for (String paramValue : namedRegexCollection.values()) {
+        if (paramValue.toLowerCase().equals(paramValue)) {
+          namedParamList.add(paramValue);
+        }
+      }
+    }
   }
 
   private String escapePattern(String inPattern) {
@@ -167,10 +184,11 @@ public class FilterGrok extends Filter {
 
     if (grokMultiline != null) {
       String jsonStr = grokMultiline.capture(inputStr);
-      if (!"{}".equals(jsonStr)) {
+      if (!"{}".equals(jsonStr) || skipOnError) {
         if (strBuff != null) {
           Map<String, Object> jsonObj = Collections.synchronizedMap(new HashMap<String, Object>());
           try {
+            LogFeederUtil.fillMapWithFieldDefaults(jsonObj, inputMarker, false);
             applyMessage(strBuff.toString(), jsonObj, currMultilineJsonStr);
           } finally {
             strBuff = null;
@@ -190,6 +208,7 @@ public class FilterGrok extends Filter {
     } else {
       savedInputMarker = inputMarker;
       Map<String, Object> jsonObj = Collections.synchronizedMap(new HashMap<String, Object>());
+      LogFeederUtil.fillMapWithFieldDefaults(jsonObj, inputMarker, false);
       applyMessage(inputStr, jsonObj, null);
     }
   }
@@ -198,6 +217,7 @@ public class FilterGrok extends Filter {
   public void apply(Map<String, Object> jsonObj, InputMarker inputMarker) throws LogfeederException {
     if (sourceField != null) {
       savedInputMarker = inputMarker;
+      LogFeederUtil.fillMapWithFieldDefaults(jsonObj, inputMarker, false);
       applyMessage((String) jsonObj.get(sourceField), jsonObj, null);
       if (removeSourceField) {
         jsonObj.remove(sourceField);
@@ -209,7 +229,7 @@ public class FilterGrok extends Filter {
     String jsonStr = grokMessage.capture(inputStr);
 
     boolean parseError = false;
-    if ("{}".equals(jsonStr)) {
+    if ("{}".equals(jsonStr) && !skipOnError) {
       parseError = true;
       logParseError(inputStr);
 

@@ -306,6 +306,8 @@ App.AssignMasterComponents = Em.Mixin.create({
   clearRecommendations: function() {
     if (this.get('content.recommendations')) {
       this.set('content.recommendations', null);
+    }
+    if (this.get('recommendations')) {
       this.set('recommendations', null);
     }
   },
@@ -551,17 +553,19 @@ App.AssignMasterComponents = Em.Mixin.create({
    * @method loadStep
    */
   loadStep: function () {
+    var self = this;
     this.clearStep();
     if (this._additionalClearSteps) {
       this._additionalClearSteps();
     }
-    this.renderHostInfo();
-    //when returning from step Assign Slaves and Clients, recommendations are already available
-    //set the flag so that recommendations AJAX call is not made unnecessarily
-    if (this.get('recommendations')) {
-      this.set('backFromNextStep',true);
-    }
-    this.loadComponentsRecommendationsFromServer(this.loadStepCallback);
+    this.renderHostInfo().done(function () {
+      //when returning from step Assign Slaves and Clients, recommendations are already available
+      //set the flag so that recommendations AJAX call is not made unnecessarily
+      if (self.get('recommendations')) {
+        self.set('backFromNextStep', true);
+      }
+      self.loadComponentsRecommendationsFromServer(self.loadStepCallback);
+    });
   },
 
   /**
@@ -626,14 +630,16 @@ App.AssignMasterComponents = Em.Mixin.create({
    * @method renderHostInfo
    */
   renderHostInfo: function () {
+    var self = this;
     var isInstaller = (this.get('wizardController.name') === 'installerController' || this.get('content.controllerName') === 'installerController');
-    App.ajax.send({
+    return App.ajax.send({
       name: isInstaller ? 'hosts.info.install' : 'hosts.high_availability.wizard',
       sender: this,
       data: {
         hostNames: isInstaller ? this.getHosts().join() : null
-      },
-      success: 'loadWizardHostsSuccessCallback'
+      }
+    }).success(function(data) {
+      self.loadWizardHostsSuccessCallback(data)
     });
   },
 
@@ -1227,7 +1233,7 @@ App.AssignMasterComponents = Em.Mixin.create({
     }
   },
 
-  nextButtonDisabled: Em.computed.or('App.router.btnClickInProgress', 'submitDisabled', 'validationInProgress'),
+  nextButtonDisabled: Em.computed.or('App.router.btnClickInProgress', 'submitDisabled', 'validationInProgress', '!isLoaded'),
 
   /**
    * Submit button click handler

@@ -21,7 +21,6 @@ limitations under the License.
 
 from resource_management.libraries.script.script import Script
 from resource_management.libraries.resources.hdfs_resource import HdfsResource
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from resource_management.libraries.functions import format
 from resource_management.libraries.functions.copy_tarball import copy_to_hdfs
@@ -56,9 +55,6 @@ class HiveServer(Script):
 
 @OsFamilyImpl(os_family=OsFamilyImpl.DEFAULT)
 class HiveServerDefault(HiveServer):
-  def get_component_name(self):
-    return "hive-server2"
-
   def start(self, env, upgrade_type=None):
     import params
     env.set_params(params)
@@ -94,8 +90,7 @@ class HiveServerDefault(HiveServer):
     env.set_params(params)
 
     if params.version and compare_versions(format_stack_version(params.version), '4.0.0.0') >= 0:
-      conf_select.select(params.stack_name, "hive", params.version)
-      stack_select.select("hive-server2", params.version)
+      stack_select.select_packages(params.version)
       #Execute(format("stack-select set hive-server2 {version}"))
       resource_created = copy_to_hdfs("mapreduce", params.user_group, params.hdfs_user)
       if resource_created:

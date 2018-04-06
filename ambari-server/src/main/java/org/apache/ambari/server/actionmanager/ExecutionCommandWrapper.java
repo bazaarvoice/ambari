@@ -19,29 +19,41 @@ package org.apache.ambari.server.actionmanager;
 
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.HOOKS_FOLDER;
 import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.SERVICE_PACKAGE_FOLDER;
+import static org.apache.ambari.server.agent.ExecutionCommand.KeyNames.VERSION;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 
 import org.apache.ambari.server.AmbariException;
 import org.apache.ambari.server.ClusterNotFoundException;
 import org.apache.ambari.server.RoleCommand;
+import org.apache.ambari.server.ServiceNotFoundException;
 import org.apache.ambari.server.agent.AgentCommand.AgentCommandType;
+import org.apache.ambari.server.agent.CommandRepository;
 import org.apache.ambari.server.agent.ExecutionCommand;
 import org.apache.ambari.server.agent.ExecutionCommand.KeyNames;
 import org.apache.ambari.server.api.services.AmbariMetaInfo;
+import org.apache.ambari.server.controller.spi.SystemException;
 import org.apache.ambari.server.orm.dao.HostRoleCommandDAO;
-import org.apache.ambari.server.orm.entities.ClusterVersionEntity;
+import org.apache.ambari.server.orm.entities.OperatingSystemEntity;
+import org.apache.ambari.server.orm.entities.RepositoryVersionEntity;
+import org.apache.ambari.server.orm.entities.UpgradeEntity;
 import org.apache.ambari.server.state.Cluster;
 import org.apache.ambari.server.state.Clusters;
 import org.apache.ambari.server.state.ConfigHelper;
 import org.apache.ambari.server.state.DesiredConfig;
+import org.apache.ambari.server.state.Host;
+import org.apache.ambari.server.state.Service;
+import org.apache.ambari.server.state.ServiceComponent;
 import org.apache.ambari.server.state.ServiceInfo;
 import org.apache.ambari.server.state.StackId;
 import org.apache.ambari.server.state.StackInfo;
+import org.apache.ambari.server.state.UpgradeContext;
+import org.apache.ambari.server.state.UpgradeContext.UpgradeSummary;
+import org.apache.ambari.server.state.UpgradeContextFactory;
+import org.apache.ambari.server.state.stack.upgrade.RepositoryVersionHelper;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,6 +80,12 @@ public class ExecutionCommandWrapper {
 
   @Inject
   private Gson gson;
+
+  @Inject
+  private UpgradeContextFactory upgradeContextFactory;
+
+  @Inject
+  private RepositoryVersionHelper repoVersionHelper;
 
   /**
    * Used for injecting hooks and common-services into the command.
@@ -97,7 +115,6 @@ public class ExecutionCommandWrapper {
    * long as it has been instructed to set updated ones at execution time.
    *
    * @return
-   * @see ExecutionCommand#setForceRefreshConfigTagsBeforeExecution(Set)
    */
   public ExecutionCommand getExecutionCommand() {
     if (executionCommand != null) {
@@ -157,7 +174,8 @@ public class ExecutionCommandWrapper {
       // now that the tags have been updated (if necessary), fetch the
       // configurations
       Map<String, Map<String, String>> configurationTags = executionCommand.getConfigurationTags();
-      if (null != configurationTags && !configurationTags.isEmpty()) {
+
+      if (MapUtils.isNotEmpty(configurationTags)) {
         Map<String, Map<String, String>> configProperties = configHelper
             .getEffectiveConfigProperties(cluster, configurationTags);
 
@@ -198,50 +216,44 @@ public class ExecutionCommandWrapper {
         }
       }
 
-      Map<String,String> commandParams = executionCommand.getCommandParams();
+      setVersions(cluster);
 
-      // set the version for the command if it's not already set
-      if (!commandParams.containsKey(KeyNames.VERSION)) {
-        // the cluster's effective version should be used for this command
-        ClusterVersionEntity effectiveClusterVersion = cluster.getEffectiveClusterVersion();
+      // provide some basic information about a cluster upgrade if there is one
+      // in progress
+      UpgradeEntity upgrade = cluster.getUpgradeInProgress();
+      if (null != upgrade) {
+        UpgradeContext upgradeContext = upgradeContextFactory.create(cluster, upgrade);
+        UpgradeSummary upgradeSummary = upgradeContext.getUpgradeSummary();
 
-        // in the event that the effective version is NULL (meaning that most
-        // likely the cluster is still being provisioned), then send down the
-        // version if this is not an install command
-        if (null == effectiveClusterVersion
-            && executionCommand.getRoleCommand() != RoleCommand.INSTALL) {
-          Collection<ClusterVersionEntity> clusterVersions = cluster.getAllClusterVersions();
-          if (clusterVersions.size() == 1) {
-            effectiveClusterVersion = clusterVersions.iterator().next();
+        executionCommand.setUpgradeSummary(upgradeSummary);
+      }
+
+      // setting repositoryFile
+      final Host host = cluster.getHost(executionCommand.getHostname());  // can be null on internal commands
+      final String serviceName = executionCommand.getServiceName(); // can be null on executing special RU tasks
+
+      if (null == executionCommand.getRepositoryFile() && null != host && null != serviceName) {
+        final CommandRepository commandRepository;
+        final Service service = cluster.getService(serviceName);
+        final String componentName = executionCommand.getComponentName();
+
+        try {
+
+          if (null != componentName) {
+            ServiceComponent serviceComponent = service.getServiceComponent(componentName);
+            commandRepository = repoVersionHelper.getCommandRepository(null, serviceComponent, host);
+          } else {
+            RepositoryVersionEntity repoVersion = service.getDesiredRepositoryVersion();
+            OperatingSystemEntity osEntity = repoVersionHelper.getOSEntityForHost(host, repoVersion);
+            commandRepository = repoVersionHelper.getCommandRepository(repoVersion, osEntity);
           }
-        }
+          executionCommand.setRepositoryFile(commandRepository);
 
-        if (null != effectiveClusterVersion) {
-          commandParams.put(KeyNames.VERSION,
-              effectiveClusterVersion.getRepositoryVersion().getVersion());
-        }
-      }
-
-      // add the stack and common-services folders to the command, but only if
-      // they don't exist - they may have been put on here with specific
-      // values ahead of time
-      StackId stackId = cluster.getDesiredStackVersion();
-      StackInfo stackInfo = ambariMetaInfo.getStack(stackId.getStackName(),
-          stackId.getStackVersion());
-
-      if (!commandParams.containsKey(HOOKS_FOLDER)) {
-        commandParams.put(HOOKS_FOLDER, stackInfo.getStackHooksFolder());
-      }
-
-      if (!commandParams.containsKey(SERVICE_PACKAGE_FOLDER)) {
-        String serviceName = executionCommand.getServiceName();
-        if (!StringUtils.isEmpty(serviceName)) {
-          ServiceInfo serviceInfo = ambariMetaInfo.getService(stackId.getStackName(),
-              stackId.getStackVersion(), serviceName);
-
-          commandParams.put(SERVICE_PACKAGE_FOLDER, serviceInfo.getServicePackageFolder());
+        } catch (SystemException e) {
+          throw new RuntimeException(e);
         }
       }
+
     } catch (ClusterNotFoundException cnfe) {
       // it's possible that there are commands without clusters; in such cases,
       // just return the de-serialized command and don't try to read configs
@@ -255,6 +267,88 @@ public class ExecutionCommandWrapper {
     }
 
     return executionCommand;
+  }
+
+  /**
+   * Sets the repository version and hooks information on the execution command.
+   *
+   * @param cluster
+   *          the cluster (not {@code null}).
+   */
+  public void setVersions(Cluster cluster) {
+    // set the repository version for the component this command is for -
+    // always use the current desired version
+    String serviceName = executionCommand.getServiceName();
+    try {
+      RepositoryVersionEntity repositoryVersion = null;
+      if (!StringUtils.isEmpty(serviceName)) {
+        Service service = cluster.getService(serviceName);
+        if (null != service) {
+          repositoryVersion = service.getDesiredRepositoryVersion();
+
+          String componentName = executionCommand.getComponentName();
+          if (!StringUtils.isEmpty(componentName)) {
+            ServiceComponent serviceComponent = service.getServiceComponent(componentName);
+            if (null != serviceComponent) {
+              repositoryVersion = serviceComponent.getDesiredRepositoryVersion();
+            }
+          }
+        }
+      }
+
+      Map<String, String> commandParams = executionCommand.getCommandParams();
+      Map<String, String> hostParams = executionCommand.getHostLevelParams();
+
+      if (null != repositoryVersion) {
+        // only set the version if it's not set and this is NOT an install
+        // command
+        // Some stack scripts use version for path purposes.  Sending unresolved version first (for
+        // blueprints) and then resolved one would result in various issues: duplicate directories
+        // (/hdp/apps/2.6.3.0 + /hdp/apps/2.6.3.0-235), parent directory not found, and file not
+        // found, etc.  Hence requiring repositoryVersion to be resolved.
+        if (!commandParams.containsKey(VERSION)
+          && repositoryVersion.isResolved()
+          && executionCommand.getRoleCommand() != RoleCommand.INSTALL) {
+          commandParams.put(VERSION, repositoryVersion.getVersion());
+        }
+
+        // !!! although not used anymore since the cluster has more than 1 version, this
+        // property might be needed by legacy mpacks or extension services, so
+        // continue to include it for backward compatibility
+        if (repositoryVersion.isResolved()) {
+          hostParams.put(KeyNames.CURRENT_VERSION, repositoryVersion.getVersion());
+        }
+
+        StackId stackId = repositoryVersion.getStackId();
+        StackInfo stackInfo = ambariMetaInfo.getStack(stackId.getStackName(),
+          stackId.getStackVersion());
+
+        if (!commandParams.containsKey(HOOKS_FOLDER)) {
+          commandParams.put(HOOKS_FOLDER, stackInfo.getStackHooksFolder());
+        }
+
+        if (!commandParams.containsKey(SERVICE_PACKAGE_FOLDER)) {
+          if (!StringUtils.isEmpty(serviceName)) {
+            ServiceInfo serviceInfo = ambariMetaInfo.getService(stackId.getStackName(),
+              stackId.getStackVersion(), serviceName);
+
+            commandParams.put(SERVICE_PACKAGE_FOLDER, serviceInfo.getServicePackageFolder());
+          }
+        }
+      }
+
+      // set the desired versions of versionable components.  This is safe even during an upgrade because
+      // we are "loading-late": components that have not yet upgraded in an EU will have the correct versions.
+      executionCommand.setComponentVersions(cluster);
+    } catch (ServiceNotFoundException serviceNotFoundException) {
+      // it's possible that there are commands specified for a service where
+      // the service doesn't exist yet
+      LOG.warn(
+        "The service {} is not installed in the cluster. No repository version will be sent for this command.",
+        serviceName);
+    } catch (AmbariException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   /**

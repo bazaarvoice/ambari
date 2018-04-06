@@ -240,14 +240,14 @@ def setup_ranger_plugin_keystore(service_name, audit_db_is_enabled, stack_versio
     mode = 0640
   )
 
-def setup_core_site_for_required_plugins(component_user, component_group, create_core_site_path, config):
+def setup_core_site_for_required_plugins(component_user, component_group, create_core_site_path, configurations = {}, configuration_attributes = {}):
   XmlConfig('core-site.xml',
-    conf_dir=create_core_site_path,
-    configurations=config['configurations']['core-site'],
-    configuration_attributes=config['configuration_attributes']['core-site'],
-    owner=component_user,
-    group=component_group,
-    mode=0644
+    conf_dir = create_core_site_path,
+    configurations = configurations,
+    configuration_attributes = configuration_attributes,
+    owner = component_user,
+    group = component_group,
+    mode = 0644
   )
 
 def get_audit_configs(config):
@@ -284,6 +284,7 @@ def get_audit_configs(config):
     previous_jdbc_jar_name = default("/hostLevelParams/previous_custom_sqlanywhere_jdbc_name", None)
     audit_jdbc_url = format('jdbc:sqlanywhere:database={xa_audit_db_name};host={xa_db_host}')
     jdbc_driver = "sap.jdbc4.sqlanywhere.IDriver"
+  else: raise Fail(format("'{xa_audit_db_flavor}' db flavor not supported."))
 
   return jdbc_jar_name, previous_jdbc_jar_name, audit_jdbc_url, jdbc_driver
 

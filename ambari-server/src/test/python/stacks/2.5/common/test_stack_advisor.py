@@ -1206,7 +1206,7 @@ class TestHDP25StackAdvisor(TestCase):
     self.assertEquals(configurations['hive-interactive-site']['properties']['hive.llap.daemon.queue.name'], 'default')
     self.assertEquals(configurations['yarn-site']['properties']['yarn.timeline-service.entity-group-fs-store.group-id-plugin-classes'],
                       'org.apache.tez.dag.history.logging.ats.TimelineCachePluginImpl,org.apache.spark.deploy.history.yarn.plugin.SparkATSPlugin')
-    self.assertEquals(configurations['yarn-site']['properties']['yarn.timeline-service.entity-group-fs-store.group-id-plugin-classpath'], '/usr/hdp/${hdp.version}/spark/hdpLib/*')
+    self.assertEquals(configurations['yarn-site']['properties']['yarn.timeline-service.entity-group-fs-store.group-id-plugin-classpath'], '/usr/hdp/{{spark_version}}/spark/hdpLib/*')
     self.assertTrue('hive-interactive-env' not in configurations)
     self.assertTrue('property_attributes' not in configurations)
 
@@ -4446,7 +4446,8 @@ class TestHDP25StackAdvisor(TestCase):
           },
         "tez-site": {
           "properties": {
-            "tez.am.resource.memory.mb": "1024"
+            "tez.am.resource.memory.mb": "1024",
+            "tez.runtime.sorter.class": "LEGACY"
           }
         },
       }
@@ -4481,6 +4482,8 @@ class TestHDP25StackAdvisor(TestCase):
 
     self.assertEqual(configurations['hive-interactive-site']['properties']['hive.llap.io.memory.size'], '186368')
     self.assertEqual(configurations['hive-interactive-env']['properties']['llap_heap_size'], '9830')
+    self.assertEqual(configurations['tez-interactive-site']['properties']['tez.runtime.io.sort.mb'], '1092')
+    self.assertEquals(configurations['tez-interactive-site']['property_attributes']['tez.runtime.io.sort.mb'], {'maximum': '1800'})
 
 
 
@@ -6037,6 +6040,7 @@ class TestHDP25StackAdvisor(TestCase):
     self.assertEquals(configurations['storm-site']['properties']['topology.metrics.consumer.register'], '[{"class": "org.apache.hadoop.metrics2.sink.storm.StormTimelineMetricsSink", '
                                                                                                       '"parallelism.hint": 1, '
                                                                                                       '"whitelist": ["kafkaOffset\\\..+/", "__complete-latency", "__process-latency", '
+                                                                                                      '"__execute-latency", '
                                                                                                       '"__receive\\\.population$", "__sendqueue\\\.population$", "__execute-count", "__emit-count", '
                                                                                                       '"__ack-count", "__fail-count", "memory/heap\\\.usedBytes$", "memory/nonHeap\\\.usedBytes$", '
                                                                                                       '"GC/.+\\\.count$", "GC/.+\\\.timeMs$"]}]')
@@ -6089,12 +6093,32 @@ class TestHDP25StackAdvisor(TestCase):
     clusterData = {
       "components" : []
     }
+    services = {
+      "services": [
+        {
+          "StackServices": {
+            "service_name": "OOZIE"
+          }, "components": []
+        },
+        ],
+      "configurations": configurations,
+      "forced-configurations": []
+    }
     expected = {
-      "oozie-site": {"properties":{}},
+      "oozie-site": {"properties":{}, 'property_attributes':
+        {'oozie.service.ELService.ext.functions.workflow': {'delete': 'true'},
+         'oozie.service.ELService.ext.functions.coord-job-submit-instances': {'delete': 'true'},
+         'oozie.service.ELService.ext.functions.coord-action-start': {'delete': 'true'},
+         'oozie.service.ELService.ext.functions.coord-job-submit-data': {'delete': 'true'},
+         'oozie.service.ELService.ext.functions.coord-sla-submit': {'delete': 'true'},
+         'oozie.service.ELService.ext.functions.coord-action-create': {'delete': 'true'},
+         'oozie.service.ELService.ext.functions.coord-action-create-inst': {'delete': 'true'},
+         'oozie.service.ELService.ext.functions.coord-sla-create': {'delete': 'true'},
+         'oozie.service.HadoopAccessorService.supported.filesystems': {'delete': 'true'}}},
       "oozie-env": {"properties":{}}
     }
 
-    self.stackAdvisor.recommendOozieConfigurations(configurations, clusterData, {"configurations":{}}, None)
+    self.stackAdvisor.recommendOozieConfigurations(configurations, clusterData, services, None)
     self.assertEquals(configurations, expected)
 
 
@@ -6125,6 +6149,89 @@ class TestHDP25StackAdvisor(TestCase):
     expected = {
       "oozie-site": {
         "properties": {
+          "oozie.service.ELService.ext.functions.coord-action-create" : 'now=org.apache.oozie.extensions.OozieELExtensions#ph2_now, \
+                            today=org.apache.oozie.extensions.OozieELExtensions#ph2_today, \
+                            yesterday=org.apache.oozie.extensions.OozieELExtensions#ph2_yesterday, \
+                            currentWeek=org.apache.oozie.extensions.OozieELExtensions#ph2_currentWeek, \
+                            lastWeek=org.apache.oozie.extensions.OozieELExtensions#ph2_lastWeek, \
+                            currentMonth=org.apache.oozie.extensions.OozieELExtensions#ph2_currentMonth, \
+                            lastMonth=org.apache.oozie.extensions.OozieELExtensions#ph2_lastMonth, \
+                            currentYear=org.apache.oozie.extensions.OozieELExtensions#ph2_currentYear, \
+                            lastYear=org.apache.oozie.extensions.OozieELExtensions#ph2_lastYear, \
+                            latest=org.apache.oozie.coord.CoordELFunctions#ph2_coord_latest_echo, \
+                            future=org.apache.oozie.coord.CoordELFunctions#ph2_coord_future_echo, \
+                            formatTime=org.apache.oozie.coord.CoordELFunctions#ph2_coord_formatTime, \
+                            user=org.apache.oozie.coord.CoordELFunctions#coord_user',
+          "oozie.service.ELService.ext.functions.coord-action-create-inst" : 'now=org.apache.oozie.extensions.OozieELExtensions#ph2_now_inst, \
+                            today=org.apache.oozie.extensions.OozieELExtensions#ph2_today_inst, \
+                            yesterday=org.apache.oozie.extensions.OozieELExtensions#ph2_yesterday_inst, \
+                            currentWeek=org.apache.oozie.extensions.OozieELExtensions#ph2_currentWeek_inst, \
+                            lastWeek=org.apache.oozie.extensions.OozieELExtensions#ph2_lastWeek_inst, \
+                            currentMonth=org.apache.oozie.extensions.OozieELExtensions#ph2_currentMonth_inst, \
+                            lastMonth=org.apache.oozie.extensions.OozieELExtensions#ph2_lastMonth_inst, \
+                            currentYear=org.apache.oozie.extensions.OozieELExtensions#ph2_currentYear_inst, \
+                            lastYear=org.apache.oozie.extensions.OozieELExtensions#ph2_lastYear_inst, \
+                            latest=org.apache.oozie.coord.CoordELFunctions#ph2_coord_latest_echo, \
+                            future=org.apache.oozie.coord.CoordELFunctions#ph2_coord_future_echo, \
+                            formatTime=org.apache.oozie.coord.CoordELFunctions#ph2_coord_formatTime, \
+                            user=org.apache.oozie.coord.CoordELFunctions#coord_user',
+          "oozie.service.ELService.ext.functions.coord-action-start" : 'now=org.apache.oozie.extensions.OozieELExtensions#ph2_now, \
+                            today=org.apache.oozie.extensions.OozieELExtensions#ph2_today, \
+                            yesterday=org.apache.oozie.extensions.OozieELExtensions#ph2_yesterday, \
+                            currentWeek=org.apache.oozie.extensions.OozieELExtensions#ph2_currentWeek, \
+                            lastWeek=org.apache.oozie.extensions.OozieELExtensions#ph2_lastWeek, \
+                            currentMonth=org.apache.oozie.extensions.OozieELExtensions#ph2_currentMonth, \
+                            lastMonth=org.apache.oozie.extensions.OozieELExtensions#ph2_lastMonth, \
+                            currentYear=org.apache.oozie.extensions.OozieELExtensions#ph2_currentYear, \
+                            lastYear=org.apache.oozie.extensions.OozieELExtensions#ph2_lastYear, \
+                            latest=org.apache.oozie.coord.CoordELFunctions#ph3_coord_latest, \
+                            future=org.apache.oozie.coord.CoordELFunctions#ph3_coord_future, \
+                            dataIn=org.apache.oozie.extensions.OozieELExtensions#ph3_dataIn, \
+                            instanceTime=org.apache.oozie.coord.CoordELFunctions#ph3_coord_nominalTime, \
+                            dateOffset=org.apache.oozie.coord.CoordELFunctions#ph3_coord_dateOffset, \
+                            formatTime=org.apache.oozie.coord.CoordELFunctions#ph3_coord_formatTime, \
+                            user=org.apache.oozie.coord.CoordELFunctions#coord_user',
+          "oozie.service.ELService.ext.functions.coord-job-submit-data" : 'now=org.apache.oozie.extensions.OozieELExtensions#ph1_now_echo, \
+                            today=org.apache.oozie.extensions.OozieELExtensions#ph1_today_echo, \
+                            yesterday=org.apache.oozie.extensions.OozieELExtensions#ph1_yesterday_echo, \
+                            currentWeek=org.apache.oozie.extensions.OozieELExtensions#ph1_currentWeek_echo, \
+                            lastWeek=org.apache.oozie.extensions.OozieELExtensions#ph1_lastWeek_echo, \
+                            currentMonth=org.apache.oozie.extensions.OozieELExtensions#ph1_currentMonth_echo, \
+                            lastMonth=org.apache.oozie.extensions.OozieELExtensions#ph1_lastMonth_echo, \
+                            currentYear=org.apache.oozie.extensions.OozieELExtensions#ph1_currentYear_echo, \
+                            lastYear=org.apache.oozie.extensions.OozieELExtensions#ph1_lastYear_echo, \
+                            dataIn=org.apache.oozie.extensions.OozieELExtensions#ph1_dataIn_echo, \
+                            instanceTime=org.apache.oozie.coord.CoordELFunctions#ph1_coord_nominalTime_echo_wrap, \
+                            formatTime=org.apache.oozie.coord.CoordELFunctions#ph1_coord_formatTime_echo, \
+                            dateOffset=org.apache.oozie.coord.CoordELFunctions#ph1_coord_dateOffset_echo, \
+                            user=org.apache.oozie.coord.CoordELFunctions#coord_user',
+          "oozie.service.ELService.ext.functions.coord-job-submit-instances" : 'now=org.apache.oozie.extensions.OozieELExtensions#ph1_now_echo, \
+                            today=org.apache.oozie.extensions.OozieELExtensions#ph1_today_echo, \
+                            yesterday=org.apache.oozie.extensions.OozieELExtensions#ph1_yesterday_echo,\
+                            currentWeek=org.apache.oozie.extensions.OozieELExtensions#ph1_currentWeek_echo, \
+                            lastWeek=org.apache.oozie.extensions.OozieELExtensions#ph1_lastWeek_echo, \
+                            currentMonth=org.apache.oozie.extensions.OozieELExtensions#ph1_currentMonth_echo, \
+                            lastMonth=org.apache.oozie.extensions.OozieELExtensions#ph1_lastMonth_echo, \
+                            currentYear=org.apache.oozie.extensions.OozieELExtensions#ph1_currentYear_echo, \
+                            lastYear=org.apache.oozie.extensions.OozieELExtensions#ph1_lastYear_echo, \
+                            formatTime=org.apache.oozie.coord.CoordELFunctions#ph1_coord_formatTime_echo, \
+                            latest=org.apache.oozie.coord.CoordELFunctions#ph2_coord_latest_echo, \
+                            future=org.apache.oozie.coord.CoordELFunctions#ph2_coord_future_echo',
+          "oozie.service.ELService.ext.functions.coord-sla-create" : 'instanceTime=org.apache.oozie.coord.CoordELFunctions#ph2_coord_nominalTime, \
+                            user=org.apache.oozie.coord.CoordELFunctions#coord_user',
+          "oozie.service.ELService.ext.functions.coord-sla-submit" : 'instanceTime=org.apache.oozie.coord.CoordELFunctions#ph1_coord_nominalTime_echo_fixed, \
+                            user=org.apache.oozie.coord.CoordELFunctions#coord_user',
+          'oozie.service.ELService.ext.functions.workflow' : 'now=org.apache.oozie.extensions.OozieELExtensions#ph1_now_echo, \
+                            today=org.apache.oozie.extensions.OozieELExtensions#ph1_today_echo, \
+                            yesterday=org.apache.oozie.extensions.OozieELExtensions#ph1_yesterday_echo, \
+                            currentMonth=org.apache.oozie.extensions.OozieELExtensions#ph1_currentMonth_echo, \
+                            lastMonth=org.apache.oozie.extensions.OozieELExtensions#ph1_lastMonth_echo, \
+                            currentYear=org.apache.oozie.extensions.OozieELExtensions#ph1_currentYear_echo, \
+                            lastYear=org.apache.oozie.extensions.OozieELExtensions#ph1_lastYear_echo, \
+                            formatTime=org.apache.oozie.coord.CoordELFunctions#ph1_coord_formatTime_echo, \
+                            latest=org.apache.oozie.coord.CoordELFunctions#ph2_coord_latest_echo, \
+                            future=org.apache.oozie.coord.CoordELFunctions#ph2_coord_future_echo',
+          "oozie.service.HadoopAccessorService.supported.filesystems" : "*",
           "oozie.services.ext": "org.apache.oozie.service.JMSAccessorService," +
                                 "org.apache.oozie.service.PartitionDependencyManagerService," +
                                 "org.apache.oozie.service.HCatAccessorService",

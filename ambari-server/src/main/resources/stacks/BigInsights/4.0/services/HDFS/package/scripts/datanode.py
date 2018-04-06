@@ -18,7 +18,6 @@ limitations under the License.
 """
 import datanode_upgrade
 from hdfs_datanode import datanode
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from resource_management import *
 from resource_management.libraries.functions.version import compare_versions, format_stack_version
@@ -61,16 +60,12 @@ class DataNode(Script):
     env.set_params(status_params)
     check_process_status(status_params.datanode_pid_file)
 
-  def get_component_name(self):
-    return "hadoop-hdfs-datanode"
-
   def pre_upgrade_restart(self, env, upgrade_type=None):
     Logger.info("Executing DataNode Stack Upgrade pre-restart")
     import params
     env.set_params(params)
     if params.version and compare_versions(format_stack_version(params.version), '4.0.0.0') >= 0:
-      conf_select.select(params.stack_name, "hadoop", params.version)
-      stack_select.select("hadoop-hdfs-datanode", params.version)
+      stack_select.select_packages(params.version)
       #Execute(format("stack-select set hadoop-hdfs-datanode {version}"))
 
 

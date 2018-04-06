@@ -94,6 +94,11 @@ import com.google.common.collect.Sets;
 public abstract class AbstractKerberosDescriptorContainer extends AbstractKerberosDescriptor {
   private static final Logger LOG = LoggerFactory.getLogger(AbstractKerberosDescriptorContainer.class);
 
+  static final String KEY_IDENTITIES = Type.IDENTITY.getDescriptorPluralName();
+  static final String KEY_CONFIGURATIONS = Type.CONFIGURATION.getDescriptorPluralName();
+  static final String KEY_AUTH_TO_LOCAL_PROPERTIES = Type.AUTH_TO_LOCAL_PROPERTY.getDescriptorPluralName();
+
+
   /**
    * Regular expression pattern used to parse auth_to_local property specifications into the following
    * parts:
@@ -133,7 +138,7 @@ public abstract class AbstractKerberosDescriptorContainer extends AbstractKerber
       Object list;
 
       // (Safely) Get the set of KerberosIdentityDescriptors
-      list = data.get(Type.IDENTITY.getDescriptorPluralName());
+      list = data.get(KEY_IDENTITIES);
       if (list instanceof Collection) {
         for (Object item : (Collection) list) {
           if (item instanceof Map) {
@@ -143,7 +148,7 @@ public abstract class AbstractKerberosDescriptorContainer extends AbstractKerber
       }
 
       // (Safely) Get the set of KerberosConfigurationDescriptors
-      list = data.get(Type.CONFIGURATION.getDescriptorPluralName());
+      list = data.get(KEY_CONFIGURATIONS);
       if (list instanceof Collection) {
         for (Object item : (Collection) list) {
           if (item instanceof Map) {
@@ -153,7 +158,7 @@ public abstract class AbstractKerberosDescriptorContainer extends AbstractKerber
       }
 
       // (Safely) Get the set of KerberosConfigurationDescriptors
-      list = data.get(Type.AUTH_TO_LOCAL_PROPERTY.getDescriptorPluralName());
+      list = data.get(KEY_AUTH_TO_LOCAL_PROPERTIES);
       if (list instanceof Collection) {
         for (Object item : (Collection) list) {
           if (item instanceof String) {
@@ -634,7 +639,7 @@ public abstract class AbstractKerberosDescriptorContainer extends AbstractKerber
    * @param path a String declaring the path to a KerberosIdentityDescriptor
    * @return a KerberosIdentityDescriptor identified by the path or null if not found
    */
-  protected KerberosIdentityDescriptor getReferencedIdentityDescriptor(String path)
+  public KerberosIdentityDescriptor getReferencedIdentityDescriptor(String path)
       throws AmbariException {
     KerberosIdentityDescriptor identityDescriptor = null;
 
@@ -757,7 +762,7 @@ public abstract class AbstractKerberosDescriptorContainer extends AbstractKerber
       for (KerberosIdentityDescriptor identity : identities) {
         list.put(identity.getName(), identity.toMap());
       }
-      map.put(Type.IDENTITY.getDescriptorPluralName(), list.values());
+      map.put(KEY_IDENTITIES, list.values());
     }
 
     if (configurations != null) {
@@ -767,11 +772,11 @@ public abstract class AbstractKerberosDescriptorContainer extends AbstractKerber
       for (KerberosConfigurationDescriptor configuration : configurations.values()) {
         list.put(configuration.getType(), configuration.toMap());
       }
-      map.put(Type.CONFIGURATION.getDescriptorPluralName(), list.values());
+      map.put(KEY_CONFIGURATIONS, list.values());
     }
 
     if (authToLocalProperties != null) {
-      map.put(Type.AUTH_TO_LOCAL_PROPERTY.getDescriptorPluralName(), authToLocalProperties);
+      map.put(KEY_AUTH_TO_LOCAL_PROPERTIES, authToLocalProperties);
     }
 
     return map;
@@ -844,6 +849,25 @@ public abstract class AbstractKerberosDescriptorContainer extends AbstractKerber
         } else {
           // For backwards compatibility, see if the identity's name indicates a reference...
           referencedIdentity = getReferencedIdentityDescriptor(identity.getName());
+
+          if(referencedIdentity != null) {
+            // Calculate the path to this identity descriptor for logging purposes.
+            // Examples:
+            //   /
+            //   /SERVICE
+            //   /SERVICE/COMPONENT
+            StringBuilder path = new StringBuilder();
+            AbstractKerberosDescriptor parent = identity.getParent();
+            while(parent != null && (parent.getName() != null)) {
+              path.insert(0, parent.getName());
+              path.insert(0, '/');
+              parent = parent.getParent();
+            }
+
+            // Log this since it is deprecated...
+            LOG.warn("Referenced identities should be declared using the identity's \"reference\" attribute, not the identity's \"name\" attribute." +
+                " This is a deprecated feature. Problems may occur in the future unless this is corrected: {}:{}", path, identity.getName());
+          }
         }
       } catch (AmbariException e) {
         throw new AmbariException(String.format("Invalid Kerberos identity reference: %s", identity.getReference()), e);

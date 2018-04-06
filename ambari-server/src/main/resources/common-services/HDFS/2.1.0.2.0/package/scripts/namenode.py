@@ -21,6 +21,7 @@ import sys
 import os
 import json
 import tempfile
+import hashlib
 from datetime import datetime
 import ambari_simplejson as json # simplejson is much faster comparing to Python 2.6 json module and has the same functions set.
 
@@ -29,7 +30,6 @@ from ambari_commons import constants
 from resource_management.libraries.script.script import Script
 from resource_management.core.resources.system import Execute, File
 from resource_management.core import shell
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from resource_management.libraries.functions.constants import Direction
 from resource_management.libraries.functions.format import format
@@ -52,30 +52,16 @@ from hdfs import hdfs
 import hdfs_rebalance
 from utils import initiate_safe_zkfc_failover, get_hdfs_binary, get_dfsadmin_base_command
 
-
-
-# hashlib is supplied as of Python 2.5 as the replacement interface for md5
-# and other secure hashes.  In 2.6, md5 is deprecated.  Import hashlib if
-# available, avoiding a deprecation warning under 2.6.  Import md5 otherwise,
-# preserving 2.4 compatibility.
-try:
-  import hashlib
-  _md5 = hashlib.md5
-except ImportError:
-  import md5
-  _md5 = md5.new
+# The hash algorithm to use to generate digests/hashes
+HASH_ALGORITHM = hashlib.sha224
 
 class NameNode(Script):
-
-  def get_component_name(self):
-    return "hadoop-hdfs-namenode"
 
   def get_hdfs_binary(self):
     """
     Get the name or path to the hdfs binary depending on the component name.
     """
-    component_name = self.get_component_name()
-    return get_hdfs_binary(component_name)
+    return get_hdfs_binary("hadoop-hdfs-namenode")
 
   def install(self, env):
     import params
@@ -172,8 +158,10 @@ class NameNodeDefault(NameNode):
     hdfs_binary = self.get_hdfs_binary()
     namenode_upgrade.prepare_upgrade_check_for_previous_dir()
     namenode_upgrade.prepare_upgrade_enter_safe_mode(hdfs_binary)
-    namenode_upgrade.prepare_upgrade_save_namespace(hdfs_binary)
-    namenode_upgrade.prepare_upgrade_backup_namenode_dir()
+    if not params.skip_namenode_save_namespace_express:
+      namenode_upgrade.prepare_upgrade_save_namespace(hdfs_binary)
+    if not params.skip_namenode_namedir_backup_express:
+      namenode_upgrade.prepare_upgrade_backup_namenode_dir()
     namenode_upgrade.prepare_upgrade_finalize_previous_upgrades(hdfs_binary)
 
     # Call -rollingUpgrade prepare
@@ -199,12 +187,7 @@ class NameNodeDefault(NameNode):
     import params
     env.set_params(params)
 
-    # When downgrading an Express Upgrade, the first thing we do is to revert the symlinks.
-    # Therefore, we cannot call this code in that scenario.
-    if upgrade_type != constants.UPGRADE_TYPE_NON_ROLLING or params.upgrade_direction != Direction.DOWNGRADE:
-      conf_select.select(params.stack_name, "hadoop", params.version)
-
-    stack_select.select("hadoop-hdfs-namenode", params.version)
+    stack_select.select_packages(params.version)
 
   def post_upgrade_restart(self, env, upgrade_type=None):
     Logger.info("Executing Stack Upgrade post-restart")
@@ -232,11 +215,11 @@ class NameNodeDefault(NameNode):
 
     if params.security_enabled:
       # Create the kerberos credentials cache (ccache) file and set it in the environment to use
-      # when executing HDFS rebalance command. Use the md5 hash of the combination of the principal and keytab file
+      # when executing HDFS rebalance command. Use the sha224 hash of the combination of the principal and keytab file
       # to generate a (relatively) unique cache filename so that we can use it as needed.
       # TODO: params.tmp_dir=/var/lib/ambari-agent/tmp. However hdfs user doesn't have access to this path.
       # TODO: Hence using /tmp
-      ccache_file_name = "hdfs_rebalance_cc_" + _md5(format("{hdfs_principal_name}|{hdfs_user_keytab}")).hexdigest()
+      ccache_file_name = "hdfs_rebalance_cc_" + HASH_ALGORITHM(format("{hdfs_principal_name}|{hdfs_user_keytab}")).hexdigest()
       ccache_file_path = os.path.join(tempfile.gettempdir(), ccache_file_name)
       rebalance_env['KRB5CCNAME'] = ccache_file_path
 

@@ -18,7 +18,6 @@ limitations under the License.
 """
 
 from resource_management import *
-from resource_management.libraries.functions import conf_select
 from resource_management.libraries.functions import stack_select
 from resource_management.libraries.functions import StackFeature
 from resource_management.libraries.functions.stack_features import check_stack_feature
@@ -57,15 +56,11 @@ class HdfsClient(Script):
 @OsFamilyImpl(os_family=OsFamilyImpl.DEFAULT)
 class HdfsClientDefault(HdfsClient):
 
-  def get_component_name(self):
-    return "hadoop-client"
-
   def pre_upgrade_restart(self, env, upgrade_type=None):
     import params
     env.set_params(params)
     if params.version and check_stack_feature(StackFeature.ROLLING_UPGRADE, params.version):
-      conf_select.select(params.stack_name, "hadoop", params.version)
-      stack_select.select("hadoop-client", params.version)
+      stack_select.select_packages(params.version)
 
 @OsFamilyImpl(os_family=OSConst.WINSRV_FAMILY)
 class HdfsClientWindows(HdfsClient):

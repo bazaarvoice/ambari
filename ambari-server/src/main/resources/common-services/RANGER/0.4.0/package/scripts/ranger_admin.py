@@ -20,7 +20,7 @@ limitations under the License.
 from resource_management.core.exceptions import Fail
 from resource_management.libraries.functions.check_process_status import check_process_status
 from resource_management.libraries.functions import stack_select
-from resource_management.libraries.functions import conf_select
+from resource_management.libraries.functions import upgrade_summary
 from resource_management.libraries.functions.constants import Direction
 from resource_management.libraries.script import Script
 from resource_management.core.resources.system import Execute, File
@@ -33,13 +33,9 @@ from setup_ranger_xml import setup_ranger_audit_solr, setup_ranger_admin_passwd_
 from resource_management.libraries.functions import solr_cloud_util
 from ambari_commons.constants import UPGRADE_TYPE_NON_ROLLING, UPGRADE_TYPE_ROLLING
 from resource_management.libraries.functions.constants import Direction
-import upgrade
 import os, errno
 
 class RangerAdmin(Script):
-
-  def get_component_name(self):
-    return "ranger-admin"
 
   def install(self, env):
     self.install_packages(env)
@@ -78,7 +74,7 @@ class RangerAdmin(Script):
     import params
     env.set_params(params)
 
-    upgrade.prestart(env, "ranger-admin")
+    stack_select.select_packages(params.version)
 
     self.set_ru_rangeradmin_in_progress(params.upgrade_marker_file)
 
@@ -203,15 +199,25 @@ class RangerAdmin(Script):
     import params
     env.set_params(params)
 
-    upgrade_stack = stack_select._get_upgrade_stack()
-    if upgrade_stack is None:
-      raise Fail('Unable to determine the stack and stack version')
+    orchestration = stack_select.PACKAGE_SCOPE_STANDARD
+    summary = upgrade_summary.get_upgrade_summary()
 
-    stack_name = upgrade_stack[0]
-    stack_version = upgrade_stack[1]
+    if summary is not None:
+      orchestration = summary.orchestration
+      if orchestration is None:
+        raise Fail("The upgrade summary does not contain an orchestration type")
 
-    stack_select.select("ranger-admin", stack_version)
-    conf_select.select(stack_name, "ranger-admin", stack_version)
+      if orchestration.upper() in stack_select._PARTIAL_ORCHESTRATION_SCOPES:
+        orchestration = stack_select.PACKAGE_SCOPE_PATCH
+
+    stack_select_packages = stack_select.get_packages(orchestration, service_name = "RANGER", component_name = "RANGER_ADMIN")
+    if stack_select_packages is None:
+      raise Fail("Unable to get packages for stack-select")
+
+    Logger.info("RANGER_ADMIN component will be stack-selected to version {0} using a {1} orchestration".format(params.version, orchestration.upper()))
+
+    for stack_select_package_name in stack_select_packages:
+      stack_select.select(stack_select_package_name, params.version)
 
   def get_log_folder(self):
     import params

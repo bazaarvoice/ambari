@@ -307,11 +307,13 @@ App.WizardStep8Controller = Em.Controller.extend(App.AddSecurityConfigs, App.wiz
         selectedStack.get('operatingSystems').forEach(function (os) {
           if (os.get('isSelected')) {
             os.get('repositories').forEach(function(repo) {
-              allRepos.push(Em.Object.create({
-                base_url: repo.get('baseUrl'),
-                os_type: repo.get('osType'),
-                repo_id: repo.get('repoId')
-              }));
+              if (repo.get('showRepo')) {
+                allRepos.push(Em.Object.create({
+                  base_url: repo.get('baseUrl'),
+                  os_type: repo.get('osType'),
+                  repo_id: repo.get('repoId')
+                }));
+              }
             }, this);
           }
         }, this);
@@ -914,6 +916,9 @@ App.WizardStep8Controller = Em.Controller.extend(App.AddSecurityConfigs, App.wiz
         installerController.postVersionDefinitionFileStep8(versionData.isXMLdata, versionData.data).done(function (versionInfo) {
           if (versionInfo.id && versionInfo.stackName && versionInfo.stackVersion) {
             var selectedStack = App.Stack.find().findProperty('isSelected', true);
+            if (selectedStack) {
+              selectedStack.set('versionInfoId', versionInfo.id);
+            }
             installerController.updateRepoOSInfo(versionInfo, selectedStack).done(function() {
               self._startDeploy();
             });
@@ -1012,9 +1017,13 @@ App.WizardStep8Controller = Em.Controller.extend(App.AddSecurityConfigs, App.wiz
    * @method createSelectedServicesData
    */
   createSelectedServicesData: function () {
-    return this.get('selectedServices').map(function (_service) {
-      return {"ServiceInfo": { "service_name": _service.get('serviceName') }};
-    });
+    var selectedStack;
+    if (this.get('isInstaller')) {
+      selectedStack = App.Stack.find().findProperty('isSelected', true);
+    }
+    return this.get('selectedServices').map(function(service) {return selectedStack ?
+      {"ServiceInfo": { "service_name": service.get('serviceName'), "desired_repository_version_id": selectedStack.get('versionInfoId') }} :
+      {"ServiceInfo": { "service_name": service.get('serviceName') }}});
   },
 
   /**
@@ -1326,7 +1335,8 @@ App.WizardStep8Controller = Em.Controller.extend(App.AddSecurityConfigs, App.wiz
           clientsToClientMap[_clientName].forEach(function (componentName) {
             clientHosts.forEach(function (_clientHost) {
               var host = this.get('content.hosts')[_clientHost.hostName];
-              if (host.isInstalled && !host.hostComponents.someProperty('HostRoles.component_name', componentName)) {
+              var isClientSelected = clients.someProperty('component_name', componentName);
+              if (host.isInstalled && isClientSelected && !host.hostComponents.someProperty('HostRoles.component_name', componentName)) {
                 hostNames.pushObject(_clientHost.hostName);
               }
             }, this);

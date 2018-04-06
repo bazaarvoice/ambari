@@ -26,13 +26,17 @@ import java.util.Map;
 import org.apache.ambari.server.StackAccessException;
 import org.apache.ambari.server.api.services.AmbariMetaInfo;
 import org.apache.ambari.server.controller.PrereqCheckRequest;
+import org.apache.ambari.server.orm.entities.RepositoryVersionEntity;
 import org.apache.ambari.server.state.Cluster;
 import org.apache.ambari.server.state.Clusters;
 import org.apache.ambari.server.state.ComponentInfo;
+import org.apache.ambari.server.state.RepositoryType;
 import org.apache.ambari.server.state.Service;
 import org.apache.ambari.server.state.ServiceComponent;
 import org.apache.ambari.server.state.ServiceInfo;
 import org.apache.ambari.server.state.StackId;
+import org.apache.ambari.server.state.repository.ClusterVersionSummary;
+import org.apache.ambari.server.state.repository.VersionDefinitionXml;
 import org.apache.ambari.server.state.stack.PrereqCheckStatus;
 import org.apache.ambari.server.state.stack.PrerequisiteCheck;
 import org.apache.commons.lang.StringUtils;
@@ -92,6 +96,15 @@ public class ComponentExistsInRepoCheckTest extends EasyMockSupport {
   @Mock
   private ServiceComponent m_zookeeperServer;
 
+  @Mock
+  private ClusterVersionSummary m_clusterVersionSummary;
+
+  @Mock
+  private VersionDefinitionXml m_vdfXml;
+
+  @Mock
+  private RepositoryVersionEntity m_repositoryVersion;
+
   @Before
   public void before() throws Exception {
 
@@ -112,6 +125,9 @@ public class ComponentExistsInRepoCheckTest extends EasyMockSupport {
     };
 
     expect(m_cluster.getServices()).andReturn(CLUSTER_SERVICES).atLeastOnce();
+    expect(m_cluster.getService("ZOOKEEPER")).andReturn(m_zookeeperService).anyTimes();
+    expect(m_cluster.getService("FOO_SERVICE")).andReturn(m_fooService).anyTimes();
+
     expect(m_clusters.getCluster((String) anyObject())).andReturn(m_cluster).anyTimes();
 
     ZK_SERVICE_COMPONENTS.put("ZOOKEEPER_SERVER", m_zookeeperServer);
@@ -131,6 +147,15 @@ public class ComponentExistsInRepoCheckTest extends EasyMockSupport {
     expect(m_ambariMetaInfo.getComponent(TARGET_STACK.getStackName(),
         TARGET_STACK.getStackVersion(), "ZOOKEEPER", "ZOOKEEPER_SERVER")).andReturn(
             m_zookeeperServerInfo).anyTimes();
+
+    expect(m_repositoryVersion.getType()).andReturn(RepositoryType.STANDARD).anyTimes();
+    expect(m_repositoryVersion.getStackId()).andReturn(TARGET_STACK).anyTimes();
+    expect(m_repositoryVersion.getVersion()).andReturn("2.2.0").anyTimes();
+
+    expect(m_repositoryVersion.getRepositoryXml()).andReturn(m_vdfXml).anyTimes();
+    expect(m_vdfXml.getClusterSummary(anyObject(Cluster.class))).andReturn(m_clusterVersionSummary).anyTimes();
+    expect(m_clusterVersionSummary.getAvailableServiceNames()).andReturn(CLUSTER_SERVICES.keySet()).anyTimes();
+
   }
 
   /**
@@ -143,7 +168,7 @@ public class ComponentExistsInRepoCheckTest extends EasyMockSupport {
     PrerequisiteCheck check = new PrerequisiteCheck(CheckDescription.COMPONENTS_EXIST_IN_TARGET_REPO, "c1");
     PrereqCheckRequest request = new PrereqCheckRequest("cluster");
     request.setSourceStackId(SOURCE_STACK);
-    request.setTargetStackId(TARGET_STACK);
+    request.setTargetRepositoryVersion(m_repositoryVersion);
 
     CLUSTER_SERVICES.put("ZOOKEEPER", m_zookeeperService);
     expect(m_zookeeperInfo.isValid()).andReturn(true).atLeastOnce();
@@ -172,7 +197,7 @@ public class ComponentExistsInRepoCheckTest extends EasyMockSupport {
     PrerequisiteCheck check = new PrerequisiteCheck(CheckDescription.COMPONENTS_EXIST_IN_TARGET_REPO, "c1");
     PrereqCheckRequest request = new PrereqCheckRequest("cluster");
     request.setSourceStackId(SOURCE_STACK);
-    request.setTargetStackId(TARGET_STACK);
+    request.setTargetRepositoryVersion(m_repositoryVersion);
 
     CLUSTER_SERVICES.put("FOO_SERVICE", m_fooService);
 
@@ -208,7 +233,7 @@ public class ComponentExistsInRepoCheckTest extends EasyMockSupport {
     PrerequisiteCheck check = new PrerequisiteCheck(CheckDescription.COMPONENTS_EXIST_IN_TARGET_REPO, "c1");
     PrereqCheckRequest request = new PrereqCheckRequest("cluster");
     request.setSourceStackId(SOURCE_STACK);
-    request.setTargetStackId(TARGET_STACK);
+    request.setTargetRepositoryVersion(m_repositoryVersion);
 
     CLUSTER_SERVICES.put("ZOOKEEPER", m_zookeeperService);
     expect(m_zookeeperInfo.isValid()).andReturn(true).atLeastOnce();
@@ -234,7 +259,7 @@ public class ComponentExistsInRepoCheckTest extends EasyMockSupport {
     PrerequisiteCheck check = new PrerequisiteCheck(CheckDescription.COMPONENTS_EXIST_IN_TARGET_REPO, "c1");
     PrereqCheckRequest request = new PrereqCheckRequest("cluster");
     request.setSourceStackId(SOURCE_STACK);
-    request.setTargetStackId(TARGET_STACK);
+    request.setTargetRepositoryVersion(m_repositoryVersion);
 
     CLUSTER_SERVICES.put("ZOOKEEPER", m_zookeeperService);
     expect(m_zookeeperInfo.isValid()).andReturn(true).atLeastOnce();
@@ -263,7 +288,7 @@ public class ComponentExistsInRepoCheckTest extends EasyMockSupport {
         CheckDescription.COMPONENTS_EXIST_IN_TARGET_REPO, "c1");
     PrereqCheckRequest request = new PrereqCheckRequest("cluster");
     request.setSourceStackId(SOURCE_STACK);
-    request.setTargetStackId(TARGET_STACK);
+    request.setTargetRepositoryVersion(m_repositoryVersion);
 
     CLUSTER_SERVICES.put("ZOOKEEPER", m_zookeeperService);
     CLUSTER_SERVICES.put("FOO_SERVICE", m_fooService);
@@ -297,7 +322,7 @@ public class ComponentExistsInRepoCheckTest extends EasyMockSupport {
         CheckDescription.COMPONENTS_EXIST_IN_TARGET_REPO, "c1");
     PrereqCheckRequest request = new PrereqCheckRequest("cluster");
     request.setSourceStackId(SOURCE_STACK);
-    request.setTargetStackId(TARGET_STACK);
+    request.setTargetRepositoryVersion(m_repositoryVersion);
 
     CLUSTER_SERVICES.put("FOO_SERVICE", m_fooService);
 

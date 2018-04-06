@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,6 +18,7 @@
 
 package org.apache.ambari.server.topology;
 
+import static org.easymock.EasyMock.anyLong;
 import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.capture;
 import static org.easymock.EasyMock.eq;
@@ -46,7 +47,6 @@ import java.util.concurrent.Future;
 
 import org.apache.ambari.server.AmbariException;
 import org.apache.ambari.server.actionmanager.HostRoleStatus;
-import org.apache.ambari.server.AmbariException;
 import org.apache.ambari.server.controller.ClusterRequest;
 import org.apache.ambari.server.controller.ConfigurationRequest;
 import org.apache.ambari.server.controller.RequestStatusResponse;
@@ -59,6 +59,7 @@ import org.apache.ambari.server.controller.spi.ClusterController;
 import org.apache.ambari.server.controller.spi.Resource;
 import org.apache.ambari.server.controller.spi.ResourceProvider;
 import org.apache.ambari.server.events.RequestFinishedEvent;
+import org.apache.ambari.server.events.publishers.AmbariEventPublisher;
 import org.apache.ambari.server.orm.dao.SettingDAO;
 import org.apache.ambari.server.orm.entities.SettingEntity;
 import org.apache.ambari.server.security.authorization.AuthorizationHelper;
@@ -66,6 +67,7 @@ import org.apache.ambari.server.security.encryption.CredentialStoreService;
 import org.apache.ambari.server.stack.NoSuchStackException;
 import org.apache.ambari.server.state.SecurityType;
 import org.apache.ambari.server.state.quicklinksprofile.QuickLinksProfile;
+import org.apache.ambari.server.topology.tasks.ConfigureClusterTask;
 import org.apache.ambari.server.topology.tasks.ConfigureClusterTaskFactory;
 import org.apache.ambari.server.topology.validators.TopologyValidatorService;
 import org.easymock.Capture;
@@ -101,7 +103,6 @@ public class TopologyManagerTest {
   private static final String SAMPLE_QUICKLINKS_PROFILE_2 =
       "{\"filters\":[],\"services\":[{\"name\":\"HDFS\",\"components\":[],\"filters\":[{\"visible\":true}]}]}";
 
-
   @Rule
   public EasyMockRule mocks = new EasyMockRule(this);
 
@@ -119,6 +120,7 @@ public class TopologyManagerTest {
 
   @Mock(type = MockType.NICE)
   private ProvisionClusterRequest request;
+
   private final PersistedTopologyRequest persistedTopologyRequest = new PersistedTopologyRequest(1, request);
   @Mock(type = MockType.STRICT)
   private LogicalRequestFactory logicalRequestFactory;
@@ -156,7 +158,8 @@ public class TopologyManagerTest {
   private ClusterTopology clusterTopologyMock;
   @Mock(type = MockType.NICE)
   private ConfigureClusterTaskFactory configureClusterTaskFactory;
-
+  @Mock(type = MockType.NICE)
+  private ConfigureClusterTask configureClusterTask;
 
   @Mock(type = MockType.STRICT)
   private Future mockFuture;
@@ -182,19 +185,19 @@ public class TopologyManagerTest {
 
   private HostGroupInfo group1Info = new HostGroupInfo("group1");
   private HostGroupInfo group2Info = new HostGroupInfo("group2");
-  private Map<String, HostGroupInfo> groupInfoMap = new HashMap<String, HostGroupInfo>();
+  private Map<String, HostGroupInfo> groupInfoMap = new HashMap<>();
 
   private Collection<Component> group1Components = Arrays.asList(new Component("component1"), new Component("component2"), new Component("component3"));
   private Collection<Component> group2Components = Arrays.asList(new Component("component3"), new Component("component4"));
 
-  private Map<String, Collection<String>> group1ServiceComponents = new HashMap<String, Collection<String>>();
-  private Map<String, Collection<String>> group2ServiceComponents = new HashMap<String, Collection<String>>();
+  private Map<String, Collection<String>> group1ServiceComponents = new HashMap<>();
+  private Map<String, Collection<String>> group2ServiceComponents = new HashMap<>();
 
-  private Map<String, Collection<String>> serviceComponents = new HashMap<String, Collection<String>>();
+  private Map<String, Collection<String>> serviceComponents = new HashMap<>();
 
   private String predicate = "Hosts/host_name=foo";
 
-  private List<TopologyValidator> topologyValidators = new ArrayList<TopologyValidator>();
+  private List<TopologyValidator> topologyValidators = new ArrayList<>();
 
   private Capture<ClusterTopology> clusterTopologyCapture;
   private Capture<Map<String, Object>> configRequestPropertiesCapture;
@@ -216,7 +219,7 @@ public class TopologyManagerTest {
     topoConfiguration.setProperty("service2-site", "s2-prop", "s2-prop-value");
     topoConfiguration.setProperty("cluster-env", "g-prop", "g-prop-value");
 
-    //clusterRequestCapture = new Capture<ClusterRequest>();
+    //clusterRequestCapture = EasyMock.newCapture();
     // group 1 has fqdn specified
     group1Info.addHost("host1");
     group1Info.setConfiguration(topoGroup1Config);
@@ -228,7 +231,7 @@ public class TopologyManagerTest {
     groupInfoMap.put("group1", group1Info);
     groupInfoMap.put("group2", group2Info);
 
-    Map<String, HostGroup> groupMap = new HashMap<String, HostGroup>();
+    Map<String, HostGroup> groupMap = new HashMap<>();
     groupMap.put("group1", group1);
     groupMap.put("group2", group2);
 
@@ -284,9 +287,7 @@ public class TopologyManagerTest {
     expect(request.getDescription()).andReturn("Provision Cluster Test").anyTimes();
     expect(request.getConfiguration()).andReturn(topoConfiguration).anyTimes();
     expect(request.getHostGroupInfo()).andReturn(groupInfoMap).anyTimes();
-
     expect(request.getConfigRecommendationStrategy()).andReturn(ConfigRecommendationStrategy.NEVER_APPLY).anyTimes();
-
     expect(request.getSecurityConfiguration()).andReturn(null).anyTimes();
 
 
@@ -322,7 +323,7 @@ public class TopologyManagerTest {
 
     expect(ambariContext.getPersistedTopologyState()).andReturn(persistedState).anyTimes();
     //todo: don't ignore param
-    ambariContext.createAmbariResources(isA(ClusterTopology.class), eq(CLUSTER_NAME), (SecurityType) isNull(), (String) isNull());
+    ambariContext.createAmbariResources(isA(ClusterTopology.class), eq(CLUSTER_NAME), (SecurityType) isNull(), (String) isNull(), anyLong());
     expectLastCall().anyTimes();
     expect(ambariContext.getNextRequestId()).andReturn(1L).anyTimes();
     expect(ambariContext.isClusterKerberosEnabled(CLUSTER_ID)).andReturn(false).anyTimes();
@@ -344,9 +345,14 @@ public class TopologyManagerTest {
 
     expect(clusterController.ensureResourceProvider(anyObject(Resource.Type.class))).andReturn(resourceProvider);
 
-    expect(executor.submit(anyObject(AsyncCallableService.class))).andReturn(mockFuture);
-
-    expectLastCall().anyTimes();
+    expect(configureClusterTaskFactory.createConfigureClusterTask(
+      anyObject(ClusterTopology.class),
+      anyObject(ClusterConfigurationRequest.class),
+      anyObject(AmbariEventPublisher.class)
+    )).andReturn(configureClusterTask);
+    expect(configureClusterTask.getTimeout()).andReturn(1000L);
+    expect(configureClusterTask.getRepeatDelay()).andReturn(50L);
+    expect(executor.submit(anyObject(AsyncCallableService.class))).andReturn(mockFuture).anyTimes();
 
     expect(persistedState.persistTopologyRequest(request)).andReturn(persistedTopologyRequest).anyTimes();
     persistedState.persistLogicalRequest(logicalRequest, 1);
@@ -397,6 +403,7 @@ public class TopologyManagerTest {
     List<LogicalRequest> requestList = new ArrayList<>();
     requestList.add(logicalRequest);
     expect(logicalRequest.hasPendingHostRequests()).andReturn(false).anyTimes();
+    expect(logicalRequest.isFinished()).andReturn(false).anyTimes();
     allRequests.put(clusterTopologyMock, requestList);
     expect(requestStatusResponse.getTasks()).andReturn(Collections.<ShortTaskStatus>emptyList()).anyTimes();
     expect(clusterTopologyMock.isClusterKerberosEnabled()).andReturn(true);
@@ -431,6 +438,8 @@ public class TopologyManagerTest {
     expect(persistedState.getAllRequests()).andReturn(Collections.<ClusterTopology,
             List<LogicalRequest>>emptyMap()).anyTimes();
     expect(persistedState.getProvisionRequest(CLUSTER_ID)).andReturn(logicalRequest).anyTimes();
+    expect(logicalRequest.isFinished()).andReturn(true).anyTimes();
+    expect(logicalRequest.isSuccessful()).andReturn(true).anyTimes();
     replayAll();
     topologyManager.provisionCluster(request);
     requestFinished();
@@ -454,6 +463,8 @@ public class TopologyManagerTest {
     expect(persistedState.getAllRequests()).andReturn(Collections.<ClusterTopology,
             List<LogicalRequest>>emptyMap()).anyTimes();
     expect(persistedState.getProvisionRequest(CLUSTER_ID)).andReturn(logicalRequest).anyTimes();
+    expect(logicalRequest.isFinished()).andReturn(true).anyTimes();
+    expect(logicalRequest.isSuccessful()).andReturn(false).anyTimes();
     replayAll();
     topologyManager.provisionCluster(request);
     requestFinished();
@@ -477,6 +488,7 @@ public class TopologyManagerTest {
     expect(persistedState.getAllRequests()).andReturn(Collections.<ClusterTopology,
             List<LogicalRequest>>emptyMap()).anyTimes();
     expect(persistedState.getProvisionRequest(CLUSTER_ID)).andReturn(logicalRequest).anyTimes();
+    expect(logicalRequest.isFinished()).andReturn(false).anyTimes();
     replayAll();
     topologyManager.provisionCluster(request);
     requestFinished();
@@ -517,6 +529,7 @@ public class TopologyManagerTest {
     expect(persistedState.getProvisionRequest(CLUSTER_ID)).andReturn(logicalRequest).anyTimes();
     expect(logicalRequest.hasPendingHostRequests()).andReturn(true).anyTimes();
     expect(logicalRequest.getCompletedHostRequests()).andReturn(Collections.EMPTY_LIST).anyTimes();
+    expect(logicalRequest.isFinished()).andReturn(true).anyTimes();
     expect(requestStatusResponse.getTasks()).andReturn(tasks).anyTimes();
     replayAll();
     EasyMock.replay(clusterTopologyMock);
@@ -532,15 +545,16 @@ public class TopologyManagerTest {
     replay(blueprint, stack, request, group1, group2, ambariContext, logicalRequestFactory,
             configurationRequest, configurationRequest2, configurationRequest3, executor,
             persistedState, clusterTopologyMock, securityConfigurationFactory, credentialStoreService,
-            clusterController, resourceProvider, mockFuture, requestStatusResponse, logicalRequest, settingDAO);
+            clusterController, resourceProvider, mockFuture, requestStatusResponse, logicalRequest, settingDAO,
+            configureClusterTaskFactory, configureClusterTask);
   }
 
   @Test(expected = InvalidTopologyException.class)
   public void testScaleHosts__alreadyExistingHost() throws InvalidTopologyTemplateException, InvalidTopologyException, AmbariException, NoSuchStackException {
     HashSet<Map<String, Object>> propertySet = new HashSet<>();
     Map<String,Object> properties = new TreeMap<>();
-    properties.put(HostResourceProvider.HOST_NAME_PROPERTY_ID, "host1");
-    properties.put(HostResourceProvider.HOSTGROUP_PROPERTY_ID, "group1");
+    properties.put(HostResourceProvider.HOST_HOST_NAME_PROPERTY_ID, "host1");
+    properties.put(HostResourceProvider.HOST_GROUP_PROPERTY_ID, "group1");
     properties.put(HostResourceProvider.HOST_CLUSTER_NAME_PROPERTY_ID, CLUSTER_NAME);
     properties.put(HostResourceProvider.BLUEPRINT_PROPERTY_ID, BLUEPRINT_NAME);
     propertySet.add(properties);

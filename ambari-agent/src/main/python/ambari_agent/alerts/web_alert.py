@@ -34,19 +34,8 @@ from resource_management.libraries.functions.get_path_from_url import get_path_f
 from resource_management.libraries.functions.curl_krb_request import curl_krb_request
 from ambari_commons import OSCheck
 from ambari_commons.inet_utils import resolve_address, ensure_ssl_using_protocol
-from ambari_agent import Constants
+from ambari_commons.constants import AGENT_TMP_DIR
 from ambari_agent.AmbariConfig import AmbariConfig
-
-# hashlib is supplied as of Python 2.5 as the replacement interface for md5
-# and other secure hashes.  In 2.6, md5 is deprecated.  Import hashlib if
-# available, avoiding a deprecation warning under 2.6.  Import md5 otherwise,
-# preserving 2.4 compatibility.
-try:
-  import hashlib
-  _md5 = hashlib.md5
-except ImportError:
-  import md5
-  _md5 = md5.new
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +95,10 @@ class WebAlert(BaseAlert):
 
     if status_code == 0:
       return (self.RESULT_CRITICAL, [status_code, url, time_seconds, error_message])
+
+    # check explicit listed codes
+    if self.uri_property_keys.acceptable_codes and status_code in self.uri_property_keys.acceptable_codes:
+      return (self.RESULT_OK, [status_code, url, time_seconds])
 
     # anything that's less than 400 is OK
     if status_code < 400:
@@ -185,10 +178,8 @@ class WebAlert(BaseAlert):
       
       if kerberos_principal is not None and kerberos_keytab is not None \
         and security_enabled is not None and security_enabled.lower() == "true":
-        # Create the kerberos credentials cache (ccache) file and set it in the environment to use
-        # when executing curl. Use the md5 hash of the combination of the principal and keytab file
-        # to generate a (relatively) unique cache filename so that we can use it as needed.
-        tmp_dir = Constants.AGENT_TMP_DIR
+
+        tmp_dir = AGENT_TMP_DIR
         if tmp_dir is None:
           tmp_dir = gettempdir()
 

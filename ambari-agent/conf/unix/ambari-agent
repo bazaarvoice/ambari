@@ -62,7 +62,7 @@ export PATH=/usr/sbin:/sbin:/usr/lib/ambari-server/*:$PATH
 export AMBARI_CONF_DIR=$HOME_DIR/etc/ambari-server/conf:$PATH
 
 # Because Ambari rpm unpacks modules here on all systems
-export PYTHONPATH=/usr/lib/python2.6/site-packages:${PYTHONPATH:-}
+export PYTHONPATH=/usr/lib/ambari-agent/lib:${PYTHONPATH:-}
 
 export AMBARI_PID_DIR=`get_agent_property piddir`
 export AMBARI_PID_DIR=`valid_path "${AMBARI_PID_DIR:?}"`
@@ -79,10 +79,12 @@ PYTHON_WRAP=/usr/bin/ambari-python-wrap
 PIDFILE=$AMBARI_PID_DIR/$AMBARI_AGENT.pid
 OUTFILE=$AMBARI_AGENT_LOG_DIR/ambari-agent.out
 LOGFILE=$AMBARI_AGENT_LOG_DIR/ambari-agent.log
-AGENT_SCRIPT=/usr/lib/python2.6/site-packages/ambari_agent/main.py
+AGENT_SCRIPT=/usr/lib/ambari-agent/lib/ambari_agent/main.py
 AGENT_TMP_DIR=/var/lib/ambari-agent/tmp
 AGENT_WORKING_DIR=/var/lib/ambari-agent
-AMBARI_AGENT_PY_SCRIPT=/usr/lib/python2.6/site-packages/ambari_agent/AmbariAgent.py
+AMBARI_AGENT_PY_SCRIPT=/usr/lib/ambari-agent/lib/ambari_agent/AmbariAgent.py
+COMMON_DIR=/usr/lib/ambari-agent/lib/ambari_commons
+COMMON_DIR_AGENT=/usr/lib/ambari-agent/lib/ambari_commons
 OK=0
 NOTOK=1
 
@@ -165,6 +167,19 @@ check_python_version ()
   return $OK
 }
 
+check_ambari_common_dir ()
+{
+  echo "Checking ambari-common dir..."
+  # recursively compare all files except 'pyc' and 'pyo' in agent common dir and actual common dir to ensure they are up to date
+  diff -r $COMMON_DIR $COMMON_DIR_AGENT -x '*.py?'
+  OUT=$?
+  if [ $OUT -ne 0 ];then
+    echo "ERROR: ambari_commons folder mismatch. $COMMON_DIR content should be the same as $COMMON_DIR_AGENT. Either ambari-agent is co-hosted with ambari-server and agent was upgraded without server or the link was broken."
+    return $NOTOK
+  fi
+  return $OK
+}
+
 retcode=0
 
 case "${1:-}" in
@@ -188,6 +203,11 @@ case "${1:-}" in
           fi
         fi
         change_files_permissions
+
+        check_ambari_common_dir
+        if [ "$?" -eq "$NOTOK" ]; then
+          exit -1
+        fi
 
         echo "Starting ambari-agent"
 

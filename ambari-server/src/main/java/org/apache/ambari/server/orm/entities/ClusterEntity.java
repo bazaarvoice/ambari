@@ -20,7 +20,6 @@ package org.apache.ambari.server.orm.entities;
 
 import static org.apache.commons.lang.StringUtils.defaultString;
 
-import java.util.ArrayList;
 import java.util.Collection;
 
 import javax.persistence.Basic;
@@ -115,9 +114,6 @@ public class ClusterEntity {
   @OneToMany(mappedBy = "clusterEntity", cascade = CascadeType.ALL)
   private Collection<ClusterConfigEntity> configEntities;
 
-  @OneToMany(mappedBy = "clusterEntity", cascade = CascadeType.REMOVE)
-  private Collection<ClusterConfigMappingEntity> configMappingEntities;
-
   @OneToMany(mappedBy = "clusterEntity", cascade = CascadeType.ALL)
   private Collection<ConfigGroupEntity> configGroupEntities;
 
@@ -129,9 +125,6 @@ public class ClusterEntity {
 
   @OneToMany(mappedBy = "clusterEntity", cascade = CascadeType.REMOVE, fetch = FetchType.LAZY)
   private Collection<AlertDefinitionEntity> alertDefinitionEntities;
-
-  @OneToMany(mappedBy = "clusterEntity", cascade = CascadeType.REMOVE, fetch = FetchType.LAZY)
-  private Collection<ClusterVersionEntity> clusterVersionEntities;
 
   @OneToMany(mappedBy = "clusterEntity", cascade = CascadeType.REMOVE, fetch = FetchType.LAZY)
   private Collection<WidgetEntity> widgetEntities;
@@ -301,14 +294,6 @@ public class ClusterEntity {
     configEntities = entities;
   }
 
-  public Collection<ClusterConfigMappingEntity> getConfigMappingEntities() {
-    return configMappingEntities;
-  }
-
-  public void setConfigMappingEntities(Collection<ClusterConfigMappingEntity> entities) {
-    configMappingEntities = entities;
-  }
-
   public Collection<ConfigGroupEntity> getConfigGroupEntities() {
     return configGroupEntities;
   }
@@ -335,19 +320,6 @@ public class ClusterEntity {
 
   public Collection<AlertDefinitionEntity> getAlertDefinitionEntities() {
     return alertDefinitionEntities;
-  }
-
-  public Collection<ClusterVersionEntity> getClusterVersionEntities() {
-    return clusterVersionEntities;
-  }
-
-  public void setClusterVersionEntities(Collection<ClusterVersionEntity> clusterVersionEntities) { this.clusterVersionEntities = clusterVersionEntities; }
-
-  public void addClusterVersionEntity(ClusterVersionEntity clusterVersionEntity) {
-    if (clusterVersionEntities == null) {
-      clusterVersionEntities = new ArrayList<ClusterVersionEntity>();
-    }
-    clusterVersionEntities.add(clusterVersionEntity);
   }
 
   /**
