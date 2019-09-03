@@ -29,6 +29,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 import org.apache.ambari.server.AmbariException;
 import org.apache.ambari.server.HostNotFoundException;
@@ -46,11 +47,14 @@ import org.apache.ambari.server.events.publishers.AmbariEventPublisher;
 import org.apache.ambari.server.orm.cache.HostConfigMapping;
 import org.apache.ambari.server.orm.cache.HostConfigMappingImpl;
 import org.apache.ambari.server.orm.dao.ClusterDAO;
+import org.apache.ambari.server.orm.dao.ConfigGroupDAO;
 import org.apache.ambari.server.orm.dao.HostConfigMappingDAO;
 import org.apache.ambari.server.orm.dao.HostDAO;
 import org.apache.ambari.server.orm.dao.HostStateDAO;
 import org.apache.ambari.server.orm.dao.HostVersionDAO;
+import org.apache.ambari.server.orm.entities.ClusterConfigEntity;
 import org.apache.ambari.server.orm.entities.ClusterEntity;
+import org.apache.ambari.server.orm.entities.ConfigGroupEntity;
 import org.apache.ambari.server.orm.entities.HostComponentStateEntity;
 import org.apache.ambari.server.orm.entities.HostEntity;
 import org.apache.ambari.server.orm.entities.HostStateEntity;
@@ -85,6 +89,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.google.inject.Inject;
 import com.google.inject.assistedinject.Assisted;
@@ -136,6 +141,9 @@ public class HostImpl implements Host {
   private ClusterDAO clusterDAO;
 
   @Inject
+  private ConfigGroupDAO configGroupDAO;
+
+  @Inject
   private Clusters clusters;
 
   @Inject
@@ -160,6 +168,8 @@ public class HostImpl implements Host {
    * lookups since it never changes.
    */
   private final String hostName;
+
+  private final String hostGroup;
 
   private long lastHeartbeatTime = 0L;
 
@@ -314,6 +324,7 @@ public class HostImpl implements Host {
     // set the host ID which will be used to retrieve it from JPA
     hostId = hostEntity.getHostId();
     hostName = hostEntity.getHostName();
+    hostGroup = hostEntity.getHostGroup();
 
     // populate the maintenance map
     maintMap = ensureMaintMap(hostEntity.getHostStateEntity());
@@ -343,6 +354,7 @@ public class HostImpl implements Host {
       LOG.info("Received host registration, host="
         + e.hostInfo
         + ", registrationTime=" + e.registrationTime
+        + ", hostGroup=" + e.hostGroup
         + ", agentVersion=" + agentVersion);
 
       host.clusters.updateHostMappings(host);
@@ -358,6 +370,7 @@ public class HostImpl implements Host {
         LOG.error("Unable to determine the clusters for host", e1);
       }
 
+      host.setHostGroup(e.hostGroup);
       host.topologyManager.onHostRegistered(host, associatedWithCluster);
 
       host.setHealthStatus(new HostHealthStatus(HealthStatus.HEALTHY,
@@ -645,6 +658,16 @@ public class HostImpl implements Host {
   public String getPublicHostName() {
     return getHostEntity().getPublicHostName();
   }
+
+  public void setHostGroup(String hostGroup) {
+    HostEntity hostEntity = getHostEntity();
+    hostEntity.setHostGroup(hostGroup);
+  }
+
+  public String getHostGroup() {
+    return getHostEntity().getHostGroup();
+  }
+
 
   @Override
   public String getIPv4() {
@@ -1074,6 +1097,7 @@ public class HostImpl implements Host {
     }
 
     // per method contract, fetch if not supplied
+    // RK Gets Only Selected Config which is default and is TOPOLOGY_RESOLVED
     if (null == clusterDesiredConfigs) {
       clusterDesiredConfigs = cluster.getDesiredConfigs();
     }
@@ -1087,7 +1111,13 @@ public class HostImpl implements Host {
       }
     }
 
+
     Map<Long, ConfigGroup> configGroups = (cluster == null) ? new HashMap<>() : cluster.getConfigGroupsByHostname(getHostName());
+
+
+    Map<String, Map<String, String>> deserializedData = new HashMap<>();
+    Map<String, Long> deserializedDataGroupId = new HashMap<>();
+    Map<String, String> deserializedDataVersionTag = new HashMap<>();
 
     if (configGroups != null && !configGroups.isEmpty()) {
       for (ConfigGroup configGroup : configGroups.values()) {
@@ -1116,6 +1146,53 @@ public class HostImpl implements Host {
         }
       }
     }
+
+    String hostGroup = clusters.getHostById(hostId).getHostGroup();
+
+    if (hostGroup != null) {
+      List<ConfigGroupEntity> configGroupEntities = configGroupDAO.findAll().stream()
+            .filter(a -> a.getGroupName().endsWith(":" + hostGroup)).collect(Collectors.toList());
+
+      configGroupEntities.forEach(
+            configGroupEntity ->  {
+              configGroupEntity.getConfigGroupConfigMappingEntities().forEach(
+                      configGroupConfigMappingEntity -> {
+                        ClusterConfigEntity clusterConfigEntity = clusterDAO.findConfig(
+                                configGroupConfigMappingEntity.getClusterId(), configGroupConfigMappingEntity.getConfigType(),
+                                configGroupConfigMappingEntity.getVersionTag()
+                        );
+                        if (clusterConfigEntity != null) {
+
+                          try {
+                            Map<String, String> deserializedProperties = gson.<Map<String, String>> fromJson(
+                                    clusterConfigEntity.getData(), Map.class);
+
+                            if (null == deserializedProperties) {
+                              deserializedData.put(configGroupConfigMappingEntity.getConfigType(), new HashMap<>());
+                            } else {
+                              deserializedData.put(configGroupConfigMappingEntity.getConfigType(), deserializedProperties);
+                              deserializedDataGroupId.put(configGroupConfigMappingEntity.getConfigType(), configGroupEntity.getGroupId());
+                              deserializedDataVersionTag.put(configGroupConfigMappingEntity.getConfigType(), configGroupConfigMappingEntity.getVersionTag());
+                            }
+
+                          } catch (JsonSyntaxException e) {
+                            LOG.error("Malformed configuration JSON stored in the database for {}/{}", clusterConfigEntity.getType(),
+                                    clusterConfigEntity.getTag());
+                          }
+                        }
+                      });
+            });
+
+  }
+
+    hostConfigMap.keySet().forEach( k -> {
+      if (deserializedData != null && !deserializedData.isEmpty()) {
+        if (deserializedData.containsKey(k)) {
+          HostConfig hostConfig = hostConfigMap.get(k);
+          hostConfig.getConfigGroupOverrides().put(deserializedDataGroupId.get(k), deserializedDataVersionTag.get(k));
+        }
+      }
+    });
     return hostConfigMap;
   }
 
@@ -1270,6 +1347,7 @@ public class HostImpl implements Host {
     setAgentVersion(e.agentVersion);
     setPublicHostName(e.publicHostName);
     setState(HostState.INIT);
+    setHostGroup(e.hostGroup);
   }
 
   @Transactional

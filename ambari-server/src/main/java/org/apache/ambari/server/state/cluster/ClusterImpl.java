@@ -516,7 +516,6 @@ public class ClusterImpl implements Cluster {
   public Map<Long, ConfigGroup> getConfigGroupsByHostname(String hostname)
     throws AmbariException {
     Map<Long, ConfigGroup> configGroups = new HashMap<>();
-
     for (Entry<Long, ConfigGroup> groupEntry : clusterConfigGroups.entrySet()) {
       Long id = groupEntry.getKey();
       ConfigGroup group = groupEntry.getValue();

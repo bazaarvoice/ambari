@@ -166,6 +166,10 @@ public interface Host extends Comparable {
    */
   String getOsType();
 
+  String getHostGroup();
+
+  void setHostGroup(String hostGroup);
+
   /**
    * Get the os Family:
    * redhat6: for centos6, rhel6, oraclelinux6 ..

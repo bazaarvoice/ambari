@@ -641,6 +641,7 @@ public class TopologyManager {
   }
 
   public void onHostRegistered(HostImpl host, boolean associatedWithCluster) {
+    String hostGroup = null;
     ensureInitialized();
     LOG.info("TopologyManager.onHostRegistered: Entering");
     if (associatedWithCluster || isHostIgnored(host.getHostName())) {
@@ -663,6 +664,7 @@ public class TopologyManager {
 
           LOG.info("TopologyManager.onHostRegistered: processing accepted host offer for reserved host = {}", hostName);
           processAcceptedHostOffer(getClusterTopology(request.getClusterId()), response, host);
+          hostGroup = response.getHostGroupName();
           matchedToRequest = true;
         }
       }
@@ -708,6 +710,7 @@ public class TopologyManager {
         }
       }
     }
+    return;
   }
 
   /**

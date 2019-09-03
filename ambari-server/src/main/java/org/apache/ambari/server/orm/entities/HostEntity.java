@@ -145,6 +145,9 @@ public class HostEntity implements Comparable<HostEntity> {
   @OneToMany(mappedBy = "hostEntity", cascade = CascadeType.REMOVE)
   private Collection<HostRoleCommandEntity> hostRoleCommandEntities;
 
+  @Column(name = "host_group", nullable = false, insertable = true, updatable = true)
+  private String hostGroup;
+
   public Long getHostId() {
     return hostId;
   }
@@ -272,6 +275,10 @@ public class HostEntity implements Comparable<HostEntity> {
   public void setHostAttributes(String hostAttributes) {
     this.hostAttributes = hostAttributes;
   }
+
+  public void setHostGroup(String hostGroup) { this.hostGroup = hostGroup; }
+
+  public String getHostGroup() { return this.hostGroup; }
 
   @Override
   public boolean equals(Object o) {

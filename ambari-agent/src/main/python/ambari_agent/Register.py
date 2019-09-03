@@ -41,6 +41,9 @@ class Register:
 
     current_ping_port = self.config.get('agent','ping_port')
 
+    f = open('/etc/ambari-agent/conf/hostgroup.txt', 'r')
+    hostGroup = f.read().rstrip()
+
     register = { 'id'                : int(response_id),
                  'timestamp'         : timestamp,
                  'hostname'          : hostname.hostname(self.config),
@@ -50,6 +53,7 @@ class Register:
                  'agentEnv'          : agentEnv,
                  'agentVersion'      : Utils.read_agent_version(self.config),
                  'prefix'            : self.config.get('agent', 'prefix'),
-                 'agentStartTime'    : self.init_time_ms
+                 'agentStartTime'    : self.init_time_ms,
+                 'hostGroup'         : hostGroup
                }
     return register

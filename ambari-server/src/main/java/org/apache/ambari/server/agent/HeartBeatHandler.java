@@ -355,7 +355,7 @@ public class HeartBeatHandler {
     hostObject.handleEvent(new HostRegistrationRequestEvent(hostname,
         null != register.getPublicHostname() ? register.getPublicHostname() : hostname,
         new AgentVersion(register.getAgentVersion()), now, register.getHardwareProfile(),
-        register.getAgentEnv(), register.getAgentStartTime()));
+        register.getAgentEnv(), register.getAgentStartTime(), register.getHostGroup()));
 
     // publish the event
     HostRegisteredEvent event = new HostRegisteredEvent(hostname, hostObject.getHostId());

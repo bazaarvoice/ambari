@@ -35,6 +35,7 @@ public class HostEntity_ {
   public static volatile SingularAttribute<HostEntity, Integer> cpuCount;
   public static volatile SingularAttribute<HostEntity, Integer> phCpuCount;
   public static volatile SingularAttribute<HostEntity, String> cpuInfo;
+  public static volatile SingularAttribute<HostEntity, String> hostGroup;
   public static volatile SingularAttribute<HostEntity, String> osArch;
   public static volatile SingularAttribute<HostEntity, String> osInfo;
   public static volatile SingularAttribute<HostEntity, String> discoveryStatus;

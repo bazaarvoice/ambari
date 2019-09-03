@@ -160,6 +160,7 @@ public class ClusterTopologyImpl implements ClusterTopology {
 
       LOG.info("ClusterTopologyImpl.addHostTopology: added host = " + host + " to host group = " + existingHostGroupInfo.getHostGroupName());
     }
+    // RK Here the code was here.
   }
 
   @Override

@@ -80,6 +80,7 @@ import org.apache.commons.lang.builder.EqualsBuilder;
         name = "ClusterConfigEntity.findEnabledConfigs",
         query = "SELECT config FROM ClusterConfigEntity config WHERE config.clusterId = :clusterId AND config.selected = 1") })
 
+
 public class ClusterConfigEntity {
 
   @Id

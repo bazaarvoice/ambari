@@ -36,6 +36,7 @@ public class Register {
   private AgentEnv agentEnv;
   private String agentVersion;
   private String prefix;
+  private String hostGroup;
 
   @JsonProperty("responseId")
   @com.fasterxml.jackson.annotation.JsonProperty("id")
@@ -117,9 +118,14 @@ public class Register {
     this.agentStartTime = agentStartTime;
   }
 
+  public void setHostGroup(String hostGroup) { this.hostGroup = hostGroup; }
+
+  public String getHostGroup() { return this.hostGroup; }
+
   @Override
   public String toString() {
     String ret = "responseId=" + responseId + "\n" +
+             "hostGroup=" + hostGroup + "\n" +
              "timestamp=" + timestamp + "\n" +
              "startTime=" + agentStartTime + "\n" +
              "hostname="  + hostname + "\n" +

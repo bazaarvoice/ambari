@@ -32,14 +32,15 @@ public class HostRegistrationRequestEvent extends HostEvent {
   final String publicHostName;
   final AgentEnv agentEnv;
   final long agentStartTime;
+  final String hostGroup;
 
   public HostRegistrationRequestEvent(String hostName,
       AgentVersion agentVersion, long registrationTime, HostInfo hostInfo, AgentEnv env, long agentStartTime) {
-    this(hostName, hostName, agentVersion, registrationTime, hostInfo, env, agentStartTime);
+    this(hostName, hostName, agentVersion, registrationTime, hostInfo, env, agentStartTime, "");
   }
   
   public HostRegistrationRequestEvent(String hostName, String publicName,
-      AgentVersion agentVersion, long registrationTime, HostInfo hostInfo, AgentEnv env, long agentStartTime) {
+      AgentVersion agentVersion, long registrationTime, HostInfo hostInfo, AgentEnv env, long agentStartTime, String hostGroup) {
     super(hostName, HostEventType.HOST_REGISTRATION_REQUEST);
     this.registrationTime = registrationTime;
     this.hostInfo = hostInfo;
@@ -47,6 +48,7 @@ public class HostRegistrationRequestEvent extends HostEvent {
     this.publicHostName = (null == publicName) ? hostName : publicName;
     this.agentEnv = env;
     this.agentStartTime = agentStartTime;
+    this.hostGroup = hostGroup;
   }
 
 

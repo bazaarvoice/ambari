@@ -112,6 +112,7 @@ CREATE TABLE hosts (
   cpu_count INTEGER NOT NULL,
   ph_cpu_count INTEGER,
   cpu_info VARCHAR(255) NOT NULL,
+  host_group VARCHAR(255),
   discovery_status VARCHAR(2000) NOT NULL,
   host_attributes VARCHAR(20000) NOT NULL,
   ipv4 VARCHAR(255),
